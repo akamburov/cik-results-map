@@ -62,7 +62,7 @@ Bulgaria has 28 provinces but **32 electoral districts**, so the mapping is not 
   e.g. `SFO` → `26. СОФИЯ област`, `SZR` → `27. СТАРА ЗАГОРА` (the codes are not
   alphabetical — check the map, don't guess).
 - **ПЛОВДИВ → 2 districts**: `16. ПЛОВДИВ град` = municipality `PDV22`; `17. ПЛОВДИВ
-  област` = all other `PDV` municipalities merged into one MultiPolygon.
+  област` = `PDV` province polygon with an interior hole cut out for `PDV22`.
 - **СОФИЯ (столица) → 3 districts, one polygon**: `23/24/25 СОФИЯ … ИР` share the `SOF`
   province polygon; the feature carries all three names in `properties.districts[]`
   and the viewer merges their votes for the fill colour.
