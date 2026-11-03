@@ -6,7 +6,8 @@ description: >-
   asks to (re)generate the data, refresh election results, explain the CIK CSV formats,
   add or change the output schema, run the preprocessing, or debug the aggregation.
   Covers the CIK CSV field maps, the extraction of the zip, the dependency-free Node
-  pipeline (`scripts/process.mjs`), the output JSON schema, and verification.
+  pipeline (bundled in this skill: `scripts/process.mjs`), the output JSON schema, and
+  verification.
 ---
 
 # CIK Election Data Processing
@@ -95,7 +96,8 @@ Field 1 = form number, field 2 = section code.
 
 ## The pipeline
 
-`scripts/process.mjs` is the only preprocessing step. It:
+`process.mjs` (bundled in this skill at `scripts/process.mjs`) is the only
+preprocessing step. It:
 1. Scans `Exports/processed/` recursively for the CSVs (ignoring any `suemg/` folder).
 2. Streams them with Node's `readline` (built-in, no deps).
 3. Joins `votes.txt` per-section data onto `sections.txt` rows (by section code).
@@ -106,12 +108,18 @@ Field 1 = form number, field 2 = section code.
 
 ### Run
 
+From the repo root (paths default to `./Exports/processed` and `./public/data`):
+
 ```bash
-node scripts/process.mjs        # regenerate public/data/*.json (only when data changed)
-node scripts/serve.mjs [port]   # preview the site locally  (default port 8000)
+node .agents/skills/cik-processing/scripts/process.mjs
+node .agents/skills/cik-processing/scripts/process.mjs \
+  --in ./Exports/processed --out ./public/data
 ```
 
-There is **no build step** anywhere else; the page loads JSON, not CSVs.
+Because the script reads paths from `--in`/`--out` (defaulting relative to the current
+working directory), the skill is portable: copy it anywhere and pass explicit paths.
+There is **no build step** anywhere else; the page loads JSON, not CSVs. (Previewing the
+site is a separate, repo concern — `node scripts/serve.mjs`.)
 
 ## Output schema (public/data/*.json)
 

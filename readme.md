@@ -27,8 +27,9 @@ so the site is fully static and requires no runtime API.
 
 - **Front end:** vanilla JavaScript + [Leaflet] via CDN, one `index.html` + `app.js`
   + `style.css`. No React, no bundler, no `npm install`.
-- **Preprocessing:** a single Node script, `scripts/process.mjs`, using only Node
-  built-ins (`fs` + `readline`). It turns the CIK CSVs into the JSON the page loads.
+- **Preprocessing:** a single Node script in the `cik-processing` skill
+  (`.agents/skills/cik-processing/scripts/process.mjs`), using only Node built-ins
+  (`fs` + `readline`). It turns the CIK CSVs into the JSON the page loads.
 - **Hosting:** GitHub Pages (just push the files).
 
 ## Project layout
@@ -36,12 +37,13 @@ so the site is fully static and requires no runtime API.
 ```
 ├── readme.md                 # this file
 ├── agents.md                 # architecture overview for agents
-├── .agents/skills/cik-processing/SKILL.md   # CIK data-processing skill
+├── .agents/skills/cik-processing/
+│   ├── SKILL.md              # CIK data-processing skill
+│   └── scripts/process.mjs   # CSV → public/data/*.json (dependency-free)
 ├── index.html                # static entry point
 ├── app.js                    # vanilla-JS app (map + table + filters)
 ├── style.css
 ├── scripts/
-│   ├── process.mjs           # CSV → public/data/*.json (dependency-free)
 │   └── serve.mjs             # tiny local static server for preview (Node built-ins)
 ├── public/data/              # GENERATED aggregates (committed, small)
 │   ├── meta.json
@@ -55,7 +57,7 @@ so the site is fully static and requires no runtime API.
 
 ```bash
 # 1) (optional, when refreshing data) regenerate the JSON from the raw export
-node scripts/process.mjs
+node .agents/skills/cik-processing/scripts/process.mjs
 
 # 2) serve the site locally (any static server works; Pages does it automatically)
 node scripts/serve.mjs           # → http://localhost:8000
@@ -85,7 +87,8 @@ For the full field maps and how to reprocess a new export, see the
 
 ## Data integrity
 
-`scripts/process.mjs` skips sections without usable coordinates and prints a
+The `cik-processing` skill's `process.mjs` skips sections without usable coordinates and
+prints a
 reconciliation summary (counted sections, total valid votes, current leader) so a
 broken or partial export is obvious before you ship.
 

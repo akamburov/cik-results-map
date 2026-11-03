@@ -16,8 +16,8 @@ For any agent (pi, Codex, Claude, GitHub Copilot, …) working in this repositor
   output schema, and how to regenerate.
 - **Rule of thumb:** never commit the raw export (`Exports/` is gitignored);
   commit only source + generated `public/data/*.json`.
-- **Order matters:** run `node scripts/process.mjs` (if data changed) **before**
-  anything that reads the JSON — the page loads JSON, not CSVs.
+- **Order matters:** run the `cik-processing` skill's `process.mjs` (if data changed)
+  **before** anything that reads the JSON — the page loads JSON, not CSVs.
 
 ## Repository layout
 
@@ -25,13 +25,14 @@ For any agent (pi, Codex, Claude, GitHub Copilot, …) working in this repositor
 cik-results-map/
 ├── readme.md                  # public-facing docs (users)
 ├── agents.md                  # this file (agents)
-├── .agents/skills/cik-processing/SKILL.md   # CIK data processing (skill)
+├── .agents/skills/cik-processing/
+│   ├── SKILL.md              # CIK data processing (skill)
+│   └── scripts/process.mjs   # CSV → public/data/*.json (Node built-ins only)
 ├── .gitignore                 # ignores Exports/, node_modules, dist
 ├── index.html                 # static entry point (<script src="app.js">)
 ├── app.js                     # vanilla-JS app: map + table + filters
 ├── style.css
 ├── scripts/
-│   ├── process.mjs           # CSV → public/data/*.json (Node built-ins only)
 │   └── serve.mjs             # preview: node scripts/serve.mjs [port]
 ├── public/data/               # GENERATED (committed): JSON the page loads
 │   ├── meta.json  ├── sections.json
@@ -41,7 +42,8 @@ cik-results-map/
 ```
 
 The exact schema of every `public/data/*.json` file and the CIK field maps live in the
-**`cik-processing` skill** — keep that skill and `scripts/process.mjs` in sync.
+**`cik-processing` skill** — keep that skill and its bundled `scripts/process.mjs` in
+sync.
 
 ## Front end (vanilla JS)
 
@@ -59,8 +61,8 @@ The exact schema of every `public/data/*.json` file and the CIK field maps live 
 
 GitHub Pages serves this **with zero build** (it is already static).
 - Simplest: Pages from the `main` branch root — just push.
-- Or a `deploy.yml` workflow that (a) runs `node scripts/process.mjs`, (b) verifies the
-  output, (c) uploads `public/` + `index.html`.
+- Or a `deploy.yml` workflow that (a) runs the `cik-processing` skill's `process.mjs`,
+  (b) verifies the output, (c) uploads `public/` + `index.html`.
 
 Deploying to a sub-path (e.g. `/cik-results-map/`)? Keep fetch paths relative
 (`./public/data/*.json`), not absolute.
@@ -71,10 +73,10 @@ Deploying to a sub-path (e.g. `/cik-results-map/`)? Keep fetch paths relative
 - CSVs are UTF-8 and `;`-delimited — **do not transcode** (the CIK docs mention
   Windows-1251, but the exports are UTF-8).
 - Keep `public/data/*.json` **committed but regenerable**; commit regenerated files
-  alongside any `process.mjs` change.
+  alongside any change to the skill's `process.mjs`.
 - **Harness (pi):** this repo's domain knowledge (CIK processing) lives in the
   `cik-processing` skill — consult it before editing the pipeline. Optionally wire a
-  **hook** (pre-commit or pi hook) that runs `node scripts/process.mjs` and checks the
+  **hook** (pre-commit or pi hook) that runs the skill's `process.mjs` and checks the
   JSON is in sync, so committed data never drifts from the script.
 - User-facing strings, party names, and region names are **Bulgarian**; code
   identifiers and comments are English.
@@ -83,8 +85,8 @@ Deploying to a sub-path (e.g. `/cik-results-map/`)? Keep fetch paths relative
 
 Covered by the `cik-processing` skill. In short: `meta.stats.totalValid` should be
 plausible (~1.4M), every `sections.json` entry has finite coords, and all `votes`
-party `id`s exist in `meta.parties`. Running `process.mjs` twice yields identical
-output.
+party `id`s exist in `meta.parties`. Running the skill's `process.mjs` twice yields
+identical output.
 
 ## Current state / next steps
 

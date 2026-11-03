@@ -2,31 +2,43 @@
  * process.mjs — one-off preprocessor for the CIK presidential-election export.
  *
  * Reads the raw CSV files (sections, votes, parties, candidates) and emits
- * compact JSON into public/data/ that the static vanilla-JS site loads.
+ * compact JSON that the static vanilla-JS site loads.
  *
- * Run:   node scripts/process.mjs
- * Input: Exports/processed/<Актуализирана база данни>/... (the extracted folder,
- *        NOT the suemg/ ballot-scan data).
+ * This script lives inside the `cik-processing` skill so the skill is
+ * self-contained and portable. Paths are given via flags; the defaults are
+ * relative to the *current working directory* (run from the repo root):
+ *
+ *   node .agents/skills/cik-processing/scripts/process.mjs
+ *   node .agents/skills/cik-processing/scripts/process.mjs \
+ *        --in ./Exports/processed --out ./public/data
+ *
+ * Flags:  --in <dir>   folder to scan for the CSVs  (default: ./Exports/processed)
+ *         --out <dir>  folder to write the JSON to   (default: ./public/data)
  *
  * No dependencies. Uses Node built-ins only (fs + readline streaming).
  *
  * Output (all deterministic, sorted keys for reviewable diffs):
- *   public/data/meta.json          election label, parties, candidates, colors, stats
- *   public/data/sections.json      per-section rows that have geo coords
- *   public/data/districts.json     aggregate per electoral region (32 units)
- *   public/data/settlements.json   aggregate per settlement (by EKATTE)
+ *   meta.json          election label, parties, candidates, colors, stats
+ *   sections.json      per-section rows that have geo coords
+ *   districts.json     aggregate per electoral region (32 units)
+ *   settlements.json   aggregate per settlement (by EKATTE)
  *
- * Data model reference: see agents.md §2 (data model) and §3 (CIK field maps).
+ * Data model reference: see the cik-processing skill (../SKILL.md).
  */
 
 import { createReadStream, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', 'Exports', 'processed');
-const OUT_DIR = join(__dirname, '..', 'public', 'data');
+// paths are relative to the current working directory (repo root by default),
+// not to this script's location — so the skill stays portable when moved.
+const args = process.argv.slice(2);
+const flag = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const DATA_DIR = resolve(process.cwd(), flag('--in') ?? 'Exports/processed');
+const OUT_DIR = resolve(process.cwd(), flag('--out') ?? 'public/data');
 const ELECTION = 'Президент и вицепрезидент 10.2026 г., тур 1';
 
 // --- helpers ---------------------------------------------------------------
