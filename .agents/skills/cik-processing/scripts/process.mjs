@@ -10,10 +10,10 @@
  *
  *   node .agents/skills/cik-processing/scripts/process.mjs
  *   node .agents/skills/cik-processing/scripts/process.mjs \
- *        --in ./Exports/processed --out ./public/data
+ *        --in ./Exports/processed --out ./data
  *
  * Flags:  --in <dir>   folder to scan for the CSVs  (default: ./Exports/processed)
- *         --out <dir>  folder to write the JSON to   (default: ./public/data)
+ *         --out <dir>  folder to write the JSON to   (default: ./data)
  *
  * No dependencies. Uses Node built-ins only (fs + readline streaming).
  *
@@ -38,7 +38,7 @@ const flag = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const DATA_DIR = resolve(process.cwd(), flag('--in') ?? 'Exports/processed');
-const OUT_DIR = resolve(process.cwd(), flag('--out') ?? 'public/data');
+const OUT_DIR = resolve(process.cwd(), flag('--out') ?? 'data');
 const ELECTION = 'Президент и вицепрезидент 10.2026 г., тур 1';
 
 // --- helpers ---------------------------------------------------------------
@@ -297,10 +297,10 @@ const setSize = writeJson('settlements.json', settlementAggs);
 const metaSize = writeJson('meta.json', meta);
 
 console.log('\n[process] wrote:');
-console.log(`  public/data/meta.json        ${metaSize} B`);
-console.log(`  public/data/sections.json    ${secSize} B  (${sections.length} sections)`);
-console.log(`  public/data/districts.json   ${disSize} B  (${regionAggs.length} regions)`);
-console.log(`  public/data/settlements.json ${setSize} B  (${settlementAggs.length} settlements)`);
+console.log(`  data/meta.json        ${metaSize} B`);
+console.log(`  data/sections.json    ${secSize} B  (${sections.length} sections)`);
+console.log(`  data/districts.json   ${disSize} B  (${regionAggs.length} regions)`);
+console.log(`  data/settlements.json ${setSize} B  (${settlementAggs.length} settlements)`);
 console.log('\n[process] summary:');
 console.log(`  parties: ${partyCount}`);
 console.log(`  counted sections: ${countedSections} / ${sections.length}`);

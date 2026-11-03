@@ -20,7 +20,7 @@ A **static, publicly-deployable web app** that lets you explore election results
 2. **Table** — a sortable/filterable tabular view (filter by region, settlement,
    party, turnout/margin) that updates the map.
 
-All data is **pre-aggregated at build time** into compact JSON (`public/data/`),
+All data is **pre-aggregated at build time** into compact JSON (`data/`),
 so the site is fully static and requires no runtime API.
 
 ## Tech stack (deliberately minimal)
@@ -39,13 +39,13 @@ so the site is fully static and requires no runtime API.
 ├── agents.md                 # architecture overview for agents
 ├── .agents/skills/cik-processing/
 │   ├── SKILL.md              # CIK data-processing skill
-│   └── scripts/process.mjs   # CSV → public/data/*.json (dependency-free)
+│   └── scripts/process.mjs   # CSV → data/*.json (dependency-free)
 ├── index.html                # static entry point
 ├── app.js                    # vanilla-JS app (map + table + filters)
 ├── style.css
 ├── scripts/
 │   └── serve.mjs             # tiny local static server for preview (Node built-ins)
-├── public/data/              # GENERATED aggregates (committed, small)
+├── data/                   # GENERATED aggregates (committed, small)
 │   ├── meta.json
 │   ├── sections.json
 │   ├── districts.json
@@ -63,13 +63,25 @@ node .agents/skills/cik-processing/scripts/process.mjs
 node scripts/serve.mjs           # → http://localhost:8000
 ```
 
-Open the page and it fetches the JSON from `public/data/` and renders the map + table.
+Open the page and it fetches the JSON from `data/` and renders the map + table.
 No compile, no dependencies, no dev-server tooling.
 
 ## Data source & files
 
-Official open data from the Central Election Commission (ЦИК), "Актуализирана база
-данни" from 25.10.2026, published under the PSI Directive 2003/98/EC. Raw files:
+Full open data from the Central Election Commission (ЦИК), published on
+[results.cik.bg](https://results.cik.bg) in machine-readable format (CSV +
+electronic spreadsheets) as required by **EU Directive 2019/1024/EU** on open data
+and the reuse of public sector information, transposed into Bulgarian law via
+*Закон за достъп до обществената информация* (Law on Access to Public Information).
+Data source: "Актуализирана база данни" accepted by ЦИК decision
+416-ПВР/27.10.2026, processed by Информационно обслужване АД.
+
+The data includes a description of the structure and location of sectional
+electoral commissions (секционни избирателни комисии) according to the Unified
+Classifier of Administrative-Territorial and Territorial Units (ЕКАТТЕ), enabling
+linking with other open datasets.
+
+Raw files:
 
 | File | Rows | Content |
 |---|---|---|
@@ -102,7 +114,11 @@ broken or partial export is obvious before you ship.
 
 ## License
 
-Code: MIT. Data © Central Election Commission (ЦИК), provided under the PSI
-Directive 2003/98/EC — see the original `readme` in the export for reuse terms.
+Code: **MIT** — see [LICENSE](LICENSE).
+
+Data: published by ЦИК under **EU Directive 2019/1024/EU** (open data and reuse of
+public sector information), transposed into Bulgarian law via
+*Закон за достъп до обществената информация*. The data is freely reusable without
+restriction, including commercially. See the original CIK data page for reuse terms.
 
 [Leaflet]: https://leafletjs.com

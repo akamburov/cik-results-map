@@ -1,5 +1,5 @@
 /* app.js — vanilla-JS election results app (map + filterable table).
- * Loads the precomputed JSON from public/data/ and renders with Leaflet + DOM.
+ * Loads the precomputed JSON from data/ and renders with Leaflet + DOM.
  * No framework, no bundler.
  */
 'use strict';
@@ -22,10 +22,10 @@ const state = {
 
 async function loadData() {
   const [meta, districts, settlements, sections] = await Promise.all([
-    fetch('./public/data/meta.json').then((r) => r.json()),
-    fetch('./public/data/districts.json').then((r) => r.json()),
-    fetch('./public/data/settlements.json').then((r) => r.json()),
-    fetch('./public/data/sections.json').then((r) => r.json()),
+    fetch('./data/meta.json').then((r) => r.json()),
+    fetch('./data/districts.json').then((r) => r.json()),
+    fetch('./data/settlements.json').then((r) => r.json()),
+    fetch('./data/sections.json').then((r) => r.json()),
   ]);
   state.meta = meta;
   state.districts = districts;

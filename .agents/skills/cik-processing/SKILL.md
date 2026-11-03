@@ -12,7 +12,7 @@ description: >-
 
 # CIK Election Data Processing
 
-Convert the raw CIK election export into the `public/data/*.json` files the vanilla-JS
+Convert the raw CIK election export into the `data/*.json` files the vanilla-JS
 site loads. Everything here is **dependency-free Node** (built-ins only) and there is no
 framework or build step.
 
@@ -108,12 +108,12 @@ preprocessing step. It:
 
 ### Run
 
-From the repo root (paths default to `./Exports/processed` and `./public/data`):
+From the repo root (paths default to `./Exports/processed` and `./data`):
 
 ```bash
 node .agents/skills/cik-processing/scripts/process.mjs
 node .agents/skills/cik-processing/scripts/process.mjs \
-  --in ./Exports/processed --out ./public/data
+  --in ./Exports/processed --out ./data
 ```
 
 Because the script reads paths from `--in`/`--out` (defaulting relative to the current
@@ -121,7 +121,7 @@ working directory), the skill is portable: copy it anywhere and pass explicit pa
 There is **no build step** anywhere else; the page loads JSON, not CSVs. (Previewing the
 site is a separate, repo concern — `node scripts/serve.mjs`.)
 
-## Output schema (public/data/*.json)
+## Output schema (data/*.json)
 
 ### `meta.json`
 `{ election, dataDate, parties:[{id,name}], candidates:[{partyId,partyName,listNo,name}],
@@ -154,7 +154,7 @@ Same shape as `districts.json` but grouped by EKATTE; sorted descending by `vali
 ## Rules
 
 - **Never commit** `Exports/` (it is gitignored). Commit only source + regenerated
-  `public/data/*.json`.
+  `data/*.json`.
 - When you change `process.mjs`, re-run it and commit the regenerated JSON in the same
   change; keep the output schema above in sync with the code.
 - User-facing strings, party names, and region names are **Bulgarian**; code identifiers
