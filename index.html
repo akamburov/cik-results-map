@@ -12,17 +12,18 @@
 <body>
   <header class="topbar">
     <h1>Избори „Президент и вицепрезидент 10.2026“ — тур 1</h1>
-    <span id="stats-line" class="muted"></span>
-    <nav class="tabs">
-      <button data-tab="map" class="tab active">Карта</button>
-      <button data-tab="table" class="tab">Таблица</button>
-    </nav>
   </header>
 
   <div class="filters">
+    <!-- View switcher: Map vs Table -->
+    <nav class="tabs segmented-control">
+      <button data-tab="map" class="seg-btn tab active">Карта</button>
+      <button data-tab="table" class="seg-btn tab">Таблица</button>
+    </nav>
+
     <!-- Common: unit switcher (districts vs settlements) -->
     <div class="segmented-control" id="unit-mode">
-      <button type="button" class="seg-btn active" data-unit="districts">Райони (32)</button>
+      <button type="button" class="seg-btn active" data-unit="districts">Райони</button>
       <button type="button" class="seg-btn" data-unit="settlements">Населени места</button>
     </div>
 
@@ -58,7 +59,10 @@
   </main>
 
   <div id="legend" class="legend"></div>
-  <p id="status" class="muted"></p>
+  <footer id="footer">
+    <span id="stats-line" class="muted"></span>
+    <span id="status" class="muted"></span>
+  </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>

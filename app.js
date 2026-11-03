@@ -62,13 +62,15 @@ function countOverall(partyId) {
 
 // ---- helpers ---------------------------------------------------------------
 
-const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('bg-BG'));
+const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('bg-BG').replace(/\u00A0/g, ' '));
 const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
 const candidateName = (id) => {
   const c = state.meta.candidates.find((x) => x.partyId === id);
-  if (c && c.name) return c.name;
-  const p = state.meta.parties.find((x) => x.id === id);
-  return p ? p.name.split('-')[0] : id;
+  const name = c && c.name ? c.name : (() => {
+    const p = state.meta.parties.find((x) => x.id === id);
+    return p ? p.name.split('-')[0] : id;
+  })();
+  return `${id}. ${name}`;
 };
 const partyColor = (id) => state.meta.partyColors[id] || '#888';
 const rows = () => (state.unit === 'districts' ? state.districts : state.settlements);
@@ -233,7 +235,7 @@ function renderLegend() {
 function updateStats() {
   const s = state.meta.stats;
   $('#stats-line').textContent =
-    `${s.countedSections} секции · ${fmt(s.totalValid)} действителни гласа · Лидер: ${s.leader ? candidateName(s.leader.id) : '—'}`;
+    `${fmt(s.countedSections)} секции · ${fmt(s.totalValid)} действителни гласа · Лидер: ${s.leader ? candidateName(s.leader.id) : '—'}`;
 }
 
 // ---- map -------------------------------------------------------------------
@@ -402,7 +404,7 @@ function openDetail(name) {
   $('#status').textContent = 'Зареждане на данни…';
   try {
     await loadData();
-    $('#status').textContent = 'Готово.';
+    $('#status').textContent = '';
     initMap();
   } catch (err) {
     $('#status').textContent = 'Грешка при зареждане на данните. Стартирай `node scripts/serve.mjs` и отвори през http://localhost:8000 (не през file://).';
