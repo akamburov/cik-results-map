@@ -84,7 +84,7 @@ function loadStateFromUrl() {
 
   // Query search
   const q = params.get('q');
-  if (q != null) state.query = q.trim().toLowerCase();
+  if (q != null) state.query = q.trim();
 
   // Selected candidate columns
   const candidates = params.get('candidates') || params.get('parties');
@@ -154,7 +154,7 @@ function updateUrl() {
       state.selectedParties.size === state.defaultParties.size &&
       [...state.selectedParties].every((id) => state.defaultParties.has(id));
     if (!isDefault) {
-      params.set('candidates', [...state.selectedParties].join(','));
+      params.set('candidates', getOrderedParties().join(','));
     }
   }
 
@@ -182,6 +182,12 @@ const candidateName = (id) => {
   return `${id}. ${name}`;
 };
 const partyColor = (id) => state.meta.partyColors[id] || '#888';
+const getOrderedParties = () => {
+  if (!state.selectedParties) return [];
+  return [...state.meta.parties]
+    .filter((p) => state.selectedParties.has(p.id))
+    .map((p) => p.id);
+};
 const rows = () => (state.unit === 'districts' ? state.districts : state.settlements);
 const rowName = (r) => (state.unit === 'districts' ? r.name : r.name);
 
@@ -210,7 +216,7 @@ document.querySelectorAll('#unit-mode .seg-btn').forEach((btn) => {
   });
 });
 $('#search').addEventListener('input', (e) => {
-  state.query = e.target.value.trim().toLowerCase();
+  state.query = e.target.value.trim();
   updateUrl();
   renderTable();
 });
@@ -240,15 +246,16 @@ function renderChips() {
 // ---- table -----------------------------------------------------------------
 
 function renderTable() {
+  const q = (state.query || '').trim().toLowerCase();
   const data = rows().filter((r) => {
-    if (!state.query) return true;
-    const name = rowName(r).toLowerCase();
-    const settle = (r.name || '').toLowerCase();
-    const lead = r.lead ? partyName(r.lead.id).toLowerCase() : '';
-    return name.includes(state.query) || settle.includes(state.query) || lead.includes(state.query);
+    if (!q) return true;
+    const name = (rowName(r) || '').toLowerCase();
+    const settle = (r.settlement || r.name || '').toLowerCase();
+    const lead = r.lead ? candidateName(r.lead.id).toLowerCase() : '';
+    return name.includes(q) || settle.includes(q) || lead.includes(q);
   });
 
-  const partyIds = [...state.selectedParties];
+  const partyIds = getOrderedParties();
   const thead = $('#thead');
   const tbody = $('#tbody');
 
