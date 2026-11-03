@@ -185,8 +185,10 @@ const partyColor = (id) => state.meta.partyColors[id] || '#888';
 const getOrderedParties = () => {
   if (!state.selectedParties) return [];
   return [...state.meta.parties]
-    .filter((p) => state.selectedParties.has(p.id))
-    .map((p) => p.id);
+    .map((p) => [p.id, countOverall(p.id)])
+    .filter(([id, c]) => c > 0 && state.selectedParties.has(id))
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
 };
 const rows = () => (state.unit === 'districts' ? state.districts : state.settlements);
 const rowName = (r) => (state.unit === 'districts' ? r.name : r.name);
