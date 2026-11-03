@@ -11,7 +11,10 @@ const state = {
   districts: [],
   settlements: [],
   sections: [],
+  geo: { districts: null, settlements: null },
+  settlementsByEkatte: null, // Map normEkatte -> settlement record
   unit: 'districts',        // 'districts' | 'settlements'
+  mapPoints: true,          // show circle markers on top of the choropleth
   query: '',
   selectedParties: null,    // Set of party ids shown as table columns
   tableRow: {},            // current row unit name for detail
@@ -21,16 +24,23 @@ const state = {
 // ---- data loading ----------------------------------------------------------
 
 async function loadData() {
-  const [meta, districts, settlements, sections] = await Promise.all([
+  const [meta, districts, settlements, sections, geoDistricts, geoSettlements] = await Promise.all([
     fetch('./data/meta.json').then((r) => r.json()),
     fetch('./data/districts.json').then((r) => r.json()),
     fetch('./data/settlements.json').then((r) => r.json()),
     fetch('./data/sections.json').then((r) => r.json()),
+    fetch('./data/districts-geo.json').then((r) => r.json()).catch(() => null),
+    fetch('./data/settlements-geo.json').then((r) => r.json()).catch(() => null),
   ]);
   state.meta = meta;
   state.districts = districts;
   state.settlements = settlements;
   state.sections = sections;
+  state.geo.districts = geoDistricts;
+  state.geo.settlements = geoSettlements;
+  state.settlementsByEkatte = new Map(
+    settlements.map((s) => [normEkatte(s.ekatte), s])
+  );
 
   // default selected parties = top N by overall valid votes
   const top = [...meta.parties]
@@ -53,6 +63,7 @@ function countOverall(partyId) {
 // ---- helpers ---------------------------------------------------------------
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('bg-BG'));
+const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
 const partyName = (id) => {
   const p = state.meta.parties.find((x) => x.id === id);
   return p ? p.name.split('-')[0] : id;
@@ -83,7 +94,7 @@ $('#unit').addEventListener('change', (e) => {
   state.unit = e.target.value;
   state.sort = { col: 'valid', dir: -1 };
   renderTable();
-  renderSectionsLayer(); // update map layer to the selected unit
+  renderMapLayers(); // update map layers to the selected unit
 });
 $('#search').addEventListener('input', (e) => {
   state.query = e.target.value.trim().toLowerCase();
@@ -217,65 +228,138 @@ function updateStats() {
 // ---- map -------------------------------------------------------------------
 
 let map = null;
-let sectionLayer = null;
+let fillLayer = null;   // choropleth (GeoJSON polygons)
+let markerLayer = null; // circle markers / clusters
 
 function initMap() {
-  map = L.map('map').setView([42.7, 25.5], 7);
+  map = L.map('map', { preferCanvas: true }).setView([42.7, 25.5], 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 18,
   }).addTo(map);
-  renderSectionsLayer();
+  renderMapLayers();
+  $('#points-toggle').addEventListener('click', () => {
+    state.mapPoints = !state.mapPoints;
+    $('#points-toggle').classList.toggle('off', !state.mapPoints);
+    renderMapLayers();
+  });
 }
 
-function renderSectionsLayer() {
-  if (sectionLayer) map.removeLayer(sectionLayer);
-  sectionLayer = L.layerGroup().addTo(map);
+const sumVotes = (recs) => {
+  const votes = {};
+  let valid = 0;
+  for (const r of recs) {
+    valid += r.valid;
+    for (const [id, v] of Object.entries(r.votes)) votes[id] = (votes[id] || 0) + v;
+  }
+  return { votes, valid };
+};
 
-  if (state.unit === 'districts') {
-    const maxValid = Math.max(...state.districts.map((d) => d.valid));
-    for (const d of state.districts) {
-      if (!d.lead) continue;
-      const r = 6 + 22 * Math.sqrt(d.valid / maxValid);
-      L.circleMarker([d.lat, d.lon], {
-        radius: r,
-        color: '#ffffff',
-        weight: 1,
-        fillColor: partyColor(d.lead.id),
-        fillOpacity: 0.85,
-      })
-        .bindTooltip(`${d.name} — ${partyName(d.lead.id)}`)
-        .on('click', () => openDetail(d.name))
-        .addTo(sectionLayer);
-    }
-  } else {
-    const sliced = state.settlements.filter((s) => s.lead && s.valid > 0);
-    const maxValid = Math.max(...sliced.map((s) => s.valid));
-    for (const s of sliced) {
-      const r = 3 + 10 * Math.sqrt(s.valid / maxValid);
-      L.circleMarker([s.lat, s.lon], {
-        radius: r,
-        color: '#ffffff',
-        weight: 0.6,
-        fillColor: partyColor(s.lead.id),
-        fillOpacity: 0.75,
-      })
-        .bindTooltip(`${s.name} — ${partyName(s.lead.id)}`)
-        .on('click', () => openDetail(s.name))
-        .addTo(sectionLayer);
-    }
+// Choropleth: color polygons by the winner(s) of the joined rows.
+function renderChoropleth(layer) {
+  for (const f of state.geo.districts.features) {
+    const recs = f.properties.districts
+      .map((name) => state.districts.find((d) => d.name === name))
+      .filter(Boolean);
+    if (!recs.length) continue;
+    const merged = recs.length === 1
+      ? recs[0]
+      : (() => {
+          const { votes, valid } = sumVotes(recs);
+          return { name: 'София (град) — 23, 24, 25 ИР', votes, valid, sections: recs.reduce((s, r) => s + r.sections, 0) };
+        })();
+    const leadId = Object.entries(merged.votes).sort((a, b) => b[1] - a[1])[0][0];
+    L.geoJSON(f, {
+      style: { color: '#ffffff', weight: 1, fillColor: partyColor(leadId), fillOpacity: 0.8 },
+    })
+      .bindTooltip(
+        recs.length > 1
+          ? `${merged.name}<br>` + recs.map((r) => `${r.name.split('.')[0]} ИР: ${partyName(r.lead.id)}`).join(' · ')
+          : `${rowName(merged)} — ${partyName(leadId)}`
+      )
+      .on('click', () => openRecord(merged))
+      .addTo(layer);
   }
 }
 
-function openDetail(name) {
-  const list = rows();
-  const r = list.find((x) => rowName(x) === name);
+function settlementChoropleth(layer) {
+  for (const f of state.geo.settlements.features) {
+    const r = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
+    if (!r || !r.lead || !r.valid) continue;
+    L.geoJSON(f, {
+      style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
+    })
+      .bindTooltip(`${r.name} — ${partyName(r.lead.id)} · ${fmt(r.valid)}`)
+      .on('click', () => openRecord(r))
+      .addTo(layer);
+  }
+}
+
+function renderMapLayers() {
+  if (fillLayer) map.removeLayer(fillLayer);
+  if (markerLayer) map.removeLayer(markerLayer);
+  fillLayer = L.layerGroup().addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+
+  if (state.unit === 'districts') {
+    if (state.geo.districts) renderChoropleth(fillLayer);
+    if (state.mapPoints) renderDistrictPoints(markerLayer);
+  } else {
+    if (state.geo.settlements) settlementChoropleth(fillLayer);
+    if (state.mapPoints) renderSettlementPoints(markerLayer);
+  }
+}
+
+function renderDistrictPoints(layer) {
+  const maxValid = Math.max(...state.districts.map((d) => d.valid));
+  for (const d of state.districts) {
+    if (!d.lead) continue;
+    const r = 6 + 22 * Math.sqrt(d.valid / maxValid);
+    L.circleMarker([d.lat, d.lon], {
+      radius: r,
+      color: '#ffffff',
+      weight: 1.5,
+      fillColor: partyColor(d.lead.id),
+      fillOpacity: 0.9,
+    })
+      .bindTooltip(`${d.name} — ${partyName(d.lead.id)}`)
+      .on('click', () => openRecord(d))
+      .addTo(layer);
+  }
+}
+
+function renderSettlementPoints(layer) {
+  const cluster = L.markerClusterGroup({
+    maxClusterRadius: 38,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    polygonOptions: { weight: 0.5, color: '#fff' },
+  });
+  const sliced = state.settlements.filter((s) => s.lead && s.valid > 0);
+  const maxValid = Math.max(...sliced.map((s) => s.valid));
+  for (const s of sliced) {
+    const r = 3 + 10 * Math.sqrt(s.valid / maxValid);
+    L.circleMarker([s.lat, s.lon], {
+      radius: r,
+      color: '#ffffff',
+      weight: 0.9,
+      fillColor: partyColor(s.lead.id),
+      fillOpacity: 0.85,
+    })
+      .bindTooltip(`${s.name} — ${partyName(s.lead.id)}`)
+      .on('click', () => openRecord(s))
+      .addTo(cluster);
+  }
+  layer.addLayer(cluster);
+}
+
+function openRecord(r) {
   if (!r) return;
   const panel = $('#map-detail');
   panel.classList.remove('hidden');
   const arr = Object.entries(r.votes).sort((a, b) => b[1] - a[1]);
   const max = arr.length ? arr[0][1] : 1;
-  panel.innerHTML = `<h3>${rowName(r)} <span class="muted">· ${fmt(r.valid)} действителни</span></h3>` +
+  panel.innerHTML = `<h3>${r.name} <span class="muted">· ${fmt(r.valid)} действителни</span></h3>` +
     arr
       .map(
         ([pid, v]) =>
@@ -284,6 +368,11 @@ function openDetail(name) {
       )
       .join('');
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openDetail(name) {
+  const r = rows().find((x) => rowName(x) === name);
+  openRecord(r);
 }
 
 // ---- boot ------------------------------------------------------------------
