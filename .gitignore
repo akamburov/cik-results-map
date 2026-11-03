@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output (deployed separately / generated)
+dist/
+build/
+*.tsbuildinfo
+
+# Raw election data — regenerable from the zip; DO NOT commit ~18MB export
+Exports/
+!Exports/.gitkeep
+
+# Local / editor
+.vscode/
+.idea/
+*.log
+.DS_Store
