@@ -14,7 +14,7 @@ const state = {
   geo: { districts: null, settlements: null },
   settlementsByEkatte: null, // Map normEkatte -> settlement record
   unit: 'districts',        // 'districts' | 'settlements'
-  mapPoints: true,          // show circle markers on top of the choropleth
+  mapMode: 'choropleth',    // 'choropleth' | 'dots'
   query: '',
   selectedParties: null,    // Set of party ids shown as table columns
   tableRow: {},            // current row unit name for detail
@@ -64,7 +64,9 @@ function countOverall(partyId) {
 
 const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('bg-BG'));
 const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
-const partyName = (id) => {
+const candidateName = (id) => {
+  const c = state.meta.candidates.find((x) => x.partyId === id);
+  if (c && c.name) return c.name;
   const p = state.meta.parties.find((x) => x.id === id);
   return p ? p.name.split('-')[0] : id;
 };
@@ -80,11 +82,14 @@ document.querySelectorAll('.tab').forEach((btn) =>
 function showTab(name) {
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === name + '-view'));
-  if (name === 'map') {
+  const isMap = name === 'map';
+  $('#map-controls').classList.toggle('hidden', !isMap);
+  $('#table-controls').classList.toggle('hidden', isMap);
+  if (isMap) {
     setTimeout(() => map.invalidateSize(), 0);
-    $('.legend').classList.remove('hidden');
+    $('#legend').classList.remove('hidden');
   } else {
-    $('.legend').classList.add('hidden');
+    $('#legend').classList.add('hidden');
   }
 }
 
@@ -111,7 +116,7 @@ function renderChips() {
   for (const [p] of ordered) {
     const el = document.createElement('button');
     el.className = 'chip' + (state.selectedParties.has(p.id) ? '' : ' off');
-    el.innerHTML = `<span class="dot" style="background:${partyColor(p.id)}"></span>${p.name.split('-')[0]}`;
+    el.innerHTML = `<span class="dot" style="background:${partyColor(p.id)}"></span>${candidateName(p.id)}`;
     el.addEventListener('click', () => {
       if (state.selectedParties.has(p.id)) state.selectedParties.delete(p.id);
       else state.selectedParties.add(p.id);
@@ -164,7 +169,7 @@ function renderTable() {
 
   const val = (r, col) => {
     if (col === 'name') return rowName(r);
-    if (col === 'lead') return r.lead ? partyName(r.lead.id) : '—';
+    if (col === 'lead') return r.lead ? candidateName(r.lead.id) : '—';
     if (col === 'sections') return r.sections;
     if (col === 'valid') return r.valid;
     return (r.votes[col] || 0);
@@ -201,10 +206,8 @@ function renderTable() {
 }
 
 function shortName(id) {
-  const p = state.meta.parties.find((x) => x.id === id);
-  if (!p) return id;
-  const n = p.name.split('-')[0];
-  return n.length > 18 ? n.slice(0, 16) + '…' : n;
+  const n = candidateName(id);
+  return n.length > 24 ? n.slice(0, 22) + '…' : n;
 }
 
 // ---- legend & stats --------------------------------------------------------
@@ -215,14 +218,14 @@ function renderLegend() {
     .map((p) => [p, countOverall(p.id)])
     .filter(([, c]) => c > 0)
     .sort((a, b) => b[1] - a[1]);
-  leg.innerHTML = '<div class="muted" style="margin-bottom:4px">Партии</div>' +
-    order.map(([p]) => `<div class="li"><span class="sw" style="background:${partyColor(p.id)}"></span>${p.name.split('-')[0]}</div>`).join('');
+  leg.innerHTML = '<div class="muted" style="margin-bottom:6px;font-weight:600">Кандидати</div>' +
+    order.map(([p]) => `<div class="li"><span class="sw" style="background:${partyColor(p.id)}"></span><span>${candidateName(p.id)}</span></div>`).join('');
 }
 
 function updateStats() {
   const s = state.meta.stats;
   $('#stats-line').textContent =
-    `${s.countedSections} секции · ${fmt(s.totalValid)} действителни гласа · Лидер: ${s.leader ? partyName(s.leader.id) : '—'}`;
+    `${s.countedSections} секции · ${fmt(s.totalValid)} действителни гласа · Лидер: ${s.leader ? candidateName(s.leader.id) : '—'}`;
 }
 
 // ---- map -------------------------------------------------------------------
@@ -238,10 +241,14 @@ function initMap() {
     maxZoom: 18,
   }).addTo(map);
   renderMapLayers();
-  $('#points-toggle').addEventListener('click', () => {
-    state.mapPoints = !state.mapPoints;
-    $('#points-toggle').classList.toggle('off', !state.mapPoints);
-    renderMapLayers();
+
+  document.querySelectorAll('#map-mode .seg-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#map-mode .seg-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.mapMode = btn.dataset.mode;
+      renderMapLayers();
+    });
   });
 }
 
@@ -274,8 +281,8 @@ function renderChoropleth(layer) {
     })
       .bindTooltip(
         recs.length > 1
-          ? `${merged.name}<br>` + recs.map((r) => `${r.name.split('.')[0]} ИР: ${partyName(r.lead.id)}`).join(' · ')
-          : `${rowName(merged)} — ${partyName(leadId)}`
+          ? `${merged.name}<br>` + recs.map((r) => `${r.name.split('.')[0]} ИР: ${candidateName(r.lead.id)}`).join(' · ')
+          : `${rowName(merged)} — ${candidateName(leadId)}`
       )
       .on('click', () => openRecord(merged))
       .addTo(layer);
@@ -289,7 +296,7 @@ function settlementChoropleth(layer) {
     L.geoJSON(f, {
       style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
     })
-      .bindTooltip(`${r.name} — ${partyName(r.lead.id)} · ${fmt(r.valid)}`)
+      .bindTooltip(`${r.name} — ${candidateName(r.lead.id)} · ${fmt(r.valid)}`)
       .on('click', () => openRecord(r))
       .addTo(layer);
   }
@@ -302,11 +309,17 @@ function renderMapLayers() {
   markerLayer = L.layerGroup().addTo(map);
 
   if (state.unit === 'districts') {
-    if (state.geo.districts) renderChoropleth(fillLayer);
-    if (state.mapPoints) renderDistrictPoints(markerLayer);
+    if (state.mapMode === 'choropleth') {
+      if (state.geo.districts) renderChoropleth(fillLayer);
+    } else {
+      renderDistrictPoints(markerLayer);
+    }
   } else {
-    if (state.geo.settlements) settlementChoropleth(fillLayer);
-    if (state.mapPoints) renderSettlementPoints(markerLayer);
+    if (state.mapMode === 'choropleth') {
+      if (state.geo.settlements) settlementChoropleth(fillLayer);
+    } else {
+      renderSettlementPoints(markerLayer);
+    }
   }
 }
 
@@ -322,7 +335,7 @@ function renderDistrictPoints(layer) {
       fillColor: partyColor(d.lead.id),
       fillOpacity: 0.9,
     })
-      .bindTooltip(`${d.name} — ${partyName(d.lead.id)}`)
+      .bindTooltip(`${d.name} — ${candidateName(d.lead.id)}`)
       .on('click', () => openRecord(d))
       .addTo(layer);
   }
@@ -346,7 +359,7 @@ function renderSettlementPoints(layer) {
       fillColor: partyColor(s.lead.id),
       fillOpacity: 0.85,
     })
-      .bindTooltip(`${s.name} — ${partyName(s.lead.id)}`)
+      .bindTooltip(`${s.name} — ${candidateName(s.lead.id)}`)
       .on('click', () => openRecord(s))
       .addTo(cluster);
   }
@@ -363,7 +376,7 @@ function openRecord(r) {
     arr
       .map(
         ([pid, v]) =>
-          `<div class="row bar"><span>${partyName(pid)}</span><span class="amt">${fmt(v)}</span></div>` +
+          `<div class="row bar"><span>${candidateName(pid)}</span><span class="amt">${fmt(v)}</span></div>` +
           `<div style="height:4px;background:#e8ebf0"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
       )
       .join('');

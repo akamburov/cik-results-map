@@ -20,7 +20,7 @@
   </header>
 
   <div class="filters">
-    <input id="search" type="search" placeholder="Търсене (район / населено място)…" autocomplete="off" />
+    <!-- Common: unit switcher (districts vs settlements) -->
     <label class="unit">
       Ред:
       <select id="unit">
@@ -28,8 +28,20 @@
         <option value="settlements">Населени места</option>
       </select>
     </label>
-    <button id="points-toggle" class="chip" title="Показване на точковите маркери върху хороплет картата">Точкови маркери</button>
-    <div class="party-chips" id="party-chips" title="Кои партии да се показват като колони в таблицата"></div>
+
+    <!-- Map controls: choropleth vs dots switcher -->
+    <div id="map-controls" class="filter-group">
+      <div class="segmented-control" id="map-mode">
+        <button type="button" class="seg-btn active" data-mode="choropleth">Хороплет</button>
+        <button type="button" class="seg-btn" data-mode="dots">Точки</button>
+      </div>
+    </div>
+
+    <!-- Table controls: search and candidate columns -->
+    <div id="table-controls" class="filter-group hidden">
+      <input id="search" type="search" placeholder="Търсене (район / населено място)…" autocomplete="off" />
+      <div class="party-chips" id="party-chips" title="Кои кандидати да се показват като колони в таблицата"></div>
+    </div>
   </div>
 
   <main>
