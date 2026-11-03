@@ -498,7 +498,7 @@ function openRecord(r) {
   panel.classList.remove('hidden');
   const arr = Object.entries(r.votes).sort((a, b) => b[1] - a[1]);
   const max = arr.length ? arr[0][1] : 1;
-  panel.innerHTML = `<h3>${r.name} <span class="muted">· ${fmt(r.valid)} действителни</span></h3>` +
+  panel.innerHTML = `<h3 style="display:flex; justify-content:space-between; align-items:center;">${r.name} <span class="muted">· ${fmt(r.valid)} действителни</span><button class="close-detail" style="background:none; border:none; font-size:24px; cursor:pointer; padding:0; line-height:1; margin-left:10px; color:inherit;">&times;</button></h3>` +
     arr
       .map(
         ([pid, v]) =>
@@ -506,6 +506,9 @@ function openRecord(r) {
           `<div style="height:4px;background:#e8ebf0"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
       )
       .join('');
+  
+  panel.querySelector('.close-detail').onclick = () => panel.classList.add('hidden');
+  
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
