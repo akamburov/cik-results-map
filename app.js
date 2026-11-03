@@ -295,7 +295,7 @@ function openDetail(name) {
     $('#status').textContent = 'Готово.';
     initMap();
   } catch (err) {
-    $('#status').textContent = 'Грешка при зареждане на данните. Стартирай статичен сървър (напр. `python -m http.server 8000`), ако отваряш през file://.';
+    $('#status').textContent = 'Грешка при зареждане на данните. Стартирай `node scripts/serve.mjs` и отвори през http://localhost:8000 (не през file://).';
     console.error(err);
   }
 })();

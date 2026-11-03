@@ -28,7 +28,8 @@ cik-results-map/
 ├── app.js                     # vanilla-JS app: map + table + filters
 ├── style.css
 ├── scripts/
-│   └── process.mjs            # CSV → public/data/*.json (Node built-ins only)
+│   ├── process.mjs           # CSV → public/data/*.json (Node built-ins only)
+│   └── serve.mjs             # preview: node scripts/serve.mjs [port] (Node built-ins)
 ├── public/data/               # GENERATED (committed): JSON the page loads
 │   ├── meta.json              # election label, parties, candidates, colors, stats
 │   ├── sections.json          # per-section geo rows w/ per-party votes
@@ -154,9 +155,10 @@ Run it after refreshing data. There is **no build step** anywhere else.
 - **Entry:** `index.html` loads Leaflet from a CDN (`//unpkg.com/leaflet@1.9.x`) and
   `app.js`. No modules bundler — keep `<script>` plain; `app.js` can be a classic
   script (no `import`/`export`) for widest compatibility with `file://` opening.
-- **Data loading:** `fetch('./public/data/*.json')`. Note: if you open via
-  `file://`, `fetch` fails — either serve via a static server or (better) keep the
-  GitHub Pages deploy as the target environment.
+- **Data loading:** `fetch('./public/data/*.json')`. Use `node scripts/serve.mjs`
+  to preview locally (or any static server). Opening via `file://` breaks fetch on most
+  browsers — the status line in `app.js` tells the user how to fix it. GitHub Pages is the
+  intended host.
 - **Layers:**
   - District circle layer from `districts.json` (centroid, colored by leader).
   - Optional section marker layer (from `sections.json`) — toggle + cluster to keep

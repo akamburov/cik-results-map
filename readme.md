@@ -40,7 +40,8 @@ so the site is fully static and requires no runtime API.
 ├── app.js                    # vanilla-JS app (map + table + filters)
 ├── style.css
 ├── scripts/
-│   └── process.mjs           # CSV → public/data/*.json (dependency-free)
+│   ├── process.mjs           # CSV → public/data/*.json (dependency-free)
+│   └── serve.mjs             # tiny local static server for preview (Node built-ins)
 ├── public/data/              # GENERATED aggregates (committed, small)
 │   ├── meta.json
 │   ├── sections.json
@@ -55,8 +56,8 @@ so the site is fully static and requires no runtime API.
 # 1) (optional, when refreshing data) regenerate the JSON from the raw export
 node scripts/process.mjs
 
-# 2) serve the site (any static server works; Pages does it automatically)
-#    e.g. python -m http.server 8000   →   http://localhost:8000
+# 2) serve the site locally (any static server works; Pages does it automatically)
+node scripts/serve.mjs           # → http://localhost:8000
 ```
 
 Open the page and it fetches the JSON from `public/data/` and renders the map + table.
