@@ -57,7 +57,7 @@ async function readRows(filename, { strip = true } = {}) {
   return rows;
 }
 
-// Official / portal colors for primary candidates; others get a golden-angle spread.
+// Official / portal colors for primary candidates; others get a shade of gray.
 const OFFICIAL_COLORS = {
   '4': 'rgb(0, 79, 153)',    // Андрей Гюров и Георги Кандев
   '11': 'rgb(61, 31, 255)',  // Костадин Костадинов и Петър Волгин
@@ -68,9 +68,10 @@ const OFFICIAL_COLORS = {
 
 function partyColor(id, seed) {
   if (OFFICIAL_COLORS[id]) return OFFICIAL_COLORS[id];
-  // golden-angle hue spread for any candidates without an official color
-  const hue = (seed * 137.508) % 360;
-  return `hsl(${hue.toFixed(1)}, 65%, 45%)`;
+  // Subdued shade of gray for all other candidates
+  // slightly modulate lightness (45%–70%) so adjacent gray dots/rows remain discernible
+  const l = 45 + ((seed * 17) % 26);
+  return `hsl(0, 0%, ${l}%)`;
 }
 
 function writeJson(name, obj) {

@@ -21,13 +21,10 @@
 
   <div class="filters">
     <!-- Common: unit switcher (districts vs settlements) -->
-    <label class="unit">
-      Ред:
-      <select id="unit">
-        <option value="districts" selected>Райони (32)</option>
-        <option value="settlements">Населени места</option>
-      </select>
-    </label>
+    <div class="segmented-control" id="unit-mode">
+      <button type="button" class="seg-btn active" data-unit="districts">Райони (32)</button>
+      <button type="button" class="seg-btn" data-unit="settlements">Населени места</button>
+    </div>
 
     <!-- Map controls: choropleth vs dots switcher -->
     <div id="map-controls" class="filter-group">

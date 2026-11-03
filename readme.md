@@ -28,6 +28,9 @@ so the site is fully static and requires no runtime API.
 
 ## Tech stack (deliberately minimal)
 
+- **AI-native development:** developed with Orca's ADE and several different models
+  (Munito: DeepSeek V4/V4.1 Flash, Qwen 3.8 27B, GLM 5.3 Flash; Google: Gemini 3.8
+  Flash, etc.).
 - **Front end:** vanilla JavaScript + [Leaflet] via CDN, one `index.html` + `app.js`
   + `style.css`. No React, no bundler, no `npm install`.
 - **Preprocessing:** two tiny Node scripts, dependency-free, each bundled in its own
@@ -137,13 +140,11 @@ geometry, see the `geo-processing` skill (`.agents/skills/geo-processing/SKILL.m
 - **Settlement choropleth** — settlement land polygons coloured by winner.
   Coverage is 4,052 of 4,127 five-digit EKATTEs (98.2%); 451 six-digit EKATTEs
   (post-2015 register) have no published polygons and fall back to circle markers.
-- **Circle markers / clustering** — toggle "Точкови маркери" to overlay the
+- **Circle markers / clustering** — toggle "Точки" to overlay the
   aggregated points; settlement markers use Leaflet.markercluster at low zooms.
 
 Boundary source: [`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-geocoding)
-(compiled from NSI / AGCC open data). ⚠️ That repository carries **no explicit
-license file** — confirm/seek permission (or use open-data.bg boundaries) before
-redistributing the `data/*-geo.json` files beyond this project.
+(compiled from NSI / AGCC open data). ⚠️ See "License" section.
 
 `node .agents/skills/geo-processing/scripts/check-geo.mjs` verifies the geometry
 before shipping:
@@ -174,10 +175,9 @@ public sector information), transposed into Bulgarian law via
 *Закон за достъп до обществената информация*. The data is freely reusable without
 restriction, including commercially. See the original CIK data page for reuse terms.
 
-Boundary geometry (`data/districts-geo.json`, `data/settlements-geo.json`): derived from
-[`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-geocoding), which
-compiles NSI/AGCC open data but carries **no explicit license**. Treat it as
-unverified for redistribution until confirmed (see “Map layers & choropleth
-geometry” above).
+Boundary geometry: derived from [`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-geocoding),
+which compiles NSI/AGCC open data but carries **no explicit license**. That repository
+carries **no explicit license file** — confirm/seek permission (or use open-data.bg boundaries)
+before redistributing the `data/*-geo.json` files beyond this project.
 
 [Leaflet]: https://leafletjs.com

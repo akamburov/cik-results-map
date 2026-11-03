@@ -95,11 +95,15 @@ function showTab(name) {
 
 // ---- filters ---------------------------------------------------------------
 
-$('#unit').addEventListener('change', (e) => {
-  state.unit = e.target.value;
-  state.sort = { col: 'valid', dir: -1 };
-  renderTable();
-  renderMapLayers(); // update map layers to the selected unit
+document.querySelectorAll('#unit-mode .seg-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#unit-mode .seg-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.unit = btn.dataset.unit;
+    state.sort = { col: 'valid', dir: -1 };
+    renderTable();
+    renderMapLayers(); // update map layers to the selected unit
+  });
 });
 $('#search').addEventListener('input', (e) => {
   state.query = e.target.value.trim().toLowerCase();
@@ -221,7 +225,9 @@ function renderLegend() {
     .filter(([, c]) => c > 0)
     .sort((a, b) => b[1] - a[1]);
   leg.innerHTML = '<div class="muted" style="margin-bottom:6px;font-weight:600">Кандидати</div>' +
-    order.map(([p]) => `<div class="li"><span class="sw" style="background:${partyColor(p.id)}"></span><span>${candidateName(p.id)}</span></div>`).join('');
+    '<div class="items">' +
+    order.map(([p]) => `<div class="li"><span class="sw" style="background:${partyColor(p.id)}"></span><span>${candidateName(p.id)}</span></div>`).join('') +
+    '</div>';
 }
 
 function updateStats() {
