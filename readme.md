@@ -35,7 +35,8 @@ so the site is fully static and requires no runtime API.
 
 ```
 ├── readme.md                 # this file
-├── agents.md                 # full architecture + data-schema docs for agents
+├── agents.md                 # architecture overview for agents
+├── .agents/skills/cik-processing/SKILL.md   # CIK data-processing skill
 ├── index.html                # static entry point
 ├── app.js                    # vanilla-JS app (map + table + filters)
 ├── style.css
@@ -78,6 +79,9 @@ Official open data from the Central Election Commission (ЦИК), "Актуал�
 
 Generated current numbers (from `meta.json`): **32 electoral regions, 12,364 mapped
 sections, 1,439,313 valid votes**.
+
+For the full field maps and how to reprocess a new export, see the
+`cik-processing` skill (`.agents/skills/cik-processing/SKILL.md`).
 
 ## Data integrity
 
