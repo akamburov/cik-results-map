@@ -17,8 +17,8 @@ const state = {
   unit: 'districts',        // 'districts' | 'settlements'
   mapMode: 'choropleth',    // 'choropleth' | 'dots'
   query: '',
-  selectedParties: null,    // Set of party ids shown as table columns
-  defaultParties: null,     // Set of default party ids (top 6)
+  selectedCandidates: null, // Set of candidate/party list numbers shown as table columns
+  defaultCandidates: null,  // Set of default candidate numbers (top 6 by votes)
   tableRow: {},            // current row unit name for detail
   sort: { col: 'valid', dir: -1 },
 };
@@ -44,14 +44,14 @@ async function loadData() {
     settlements.map((s) => [normEkatte(s.ekatte), s])
   );
 
-  // default selected parties = top N by overall valid votes
-  const top = [...meta.parties]
-    .map((p) => [p.id, countOverall(p.id)])
-    .filter(([, c]) => c > 0)
+  // default selected candidates = top N by overall valid votes
+  const top = [...meta.candidates]
+    .map((c) => [c.partyId, countOverall(c.partyId)])
+    .filter(([, votes]) => votes > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6)
     .map(([id]) => id);
-  state.defaultParties = new Set(top);
+  state.defaultCandidates = new Set(top);
 
   loadStateFromUrl();
   syncControlsToState();
@@ -89,10 +89,10 @@ function loadStateFromUrl() {
   // Selected candidate columns
   const candidates = params.get('candidates') || params.get('parties');
   if (candidates != null) {
-    const list = candidates.split(',').map((s) => s.trim()).filter((id) => state.meta.parties.some((p) => p.id === id));
-    state.selectedParties = new Set(list);
-  } else if (!state.selectedParties) {
-    state.selectedParties = new Set(state.defaultParties);
+    const list = candidates.split(',').map((s) => s.trim()).filter((id) => state.meta.candidates.some((c) => c.partyId === id));
+    state.selectedCandidates = new Set(list);
+  } else if (!state.selectedCandidates) {
+    state.selectedCandidates = new Set(state.defaultCandidates);
   }
 
   // Sort column & direction
@@ -148,13 +148,13 @@ function updateUrl() {
   if (state.query) params.set('q', state.query);
 
   // Selected candidate columns (if different from default top 6)
-  if (state.selectedParties) {
+  if (state.selectedCandidates) {
     const isDefault =
-      state.defaultParties &&
-      state.selectedParties.size === state.defaultParties.size &&
-      [...state.selectedParties].every((id) => state.defaultParties.has(id));
+      state.defaultCandidates &&
+      state.selectedCandidates.size === state.defaultCandidates.size &&
+      [...state.selectedCandidates].every((id) => state.defaultCandidates.has(id));
     if (!isDefault) {
-      params.set('candidates', getOrderedParties().join(','));
+      params.set('candidates', getOrderedCandidates().join(','));
     }
   }
 
@@ -182,11 +182,11 @@ const candidateName = (id) => {
   return `${id}. ${name}`;
 };
 const partyColor = (id) => state.meta.partyColors[id] || '#888';
-const getOrderedParties = () => {
-  if (!state.selectedParties) return [];
-  return [...state.meta.parties]
-    .map((p) => [p.id, countOverall(p.id)])
-    .filter(([id, c]) => c > 0 && state.selectedParties.has(id))
+const getOrderedCandidates = () => {
+  if (!state.selectedCandidates) return [];
+  return [...state.meta.candidates]
+    .map((c) => [c.partyId, countOverall(c.partyId)])
+    .filter(([id, votes]) => votes > 0 && state.selectedCandidates.has(id))
     .sort((a, b) => b[1] - a[1])
     .map(([id]) => id);
 };
@@ -226,17 +226,17 @@ $('#search').addEventListener('input', (e) => {
 function renderChips() {
   const wrap = $('#party-chips');
   wrap.innerHTML = '';
-  const ordered = [...state.meta.parties]
-    .map((p) => [p, countOverall(p.id)])
-    .filter(([, c]) => c > 0)
+  const ordered = [...state.meta.candidates]
+    .map((c) => [c, countOverall(c.partyId)])
+    .filter(([, votes]) => votes > 0)
     .sort((a, b) => b[1] - a[1]);
-  for (const [p] of ordered) {
+  for (const [c] of ordered) {
     const el = document.createElement('button');
-    el.className = 'chip' + (state.selectedParties.has(p.id) ? '' : ' off');
-    el.innerHTML = `<span class="dot" style="background:${partyColor(p.id)}"></span>${candidateName(p.id)}`;
+    el.className = 'chip' + (state.selectedCandidates.has(c.partyId) ? '' : ' off');
+    el.innerHTML = `<span class="dot" style="background:${partyColor(c.partyId)}"></span>${candidateName(c.partyId)}`;
     el.addEventListener('click', () => {
-      if (state.selectedParties.has(p.id)) state.selectedParties.delete(p.id);
-      else state.selectedParties.add(p.id);
+      if (state.selectedCandidates.has(c.partyId)) state.selectedCandidates.delete(c.partyId);
+      else state.selectedCandidates.add(c.partyId);
       updateUrl();
       renderChips();
       renderTable();
@@ -257,7 +257,7 @@ function renderTable() {
     return name.includes(q) || settle.includes(q) || lead.includes(q);
   });
 
-  const partyIds = getOrderedParties();
+  const candidateIds = getOrderedCandidates();
   const thead = $('#thead');
   const tbody = $('#tbody');
 
@@ -266,7 +266,7 @@ function renderTable() {
     { key: 'lead', label: 'Победител', align: 'left' },
     { key: 'sections', label: 'Секции' },
     { key: 'valid', label: 'Действителни' },
-    ...partyIds.map((id) => ({ key: id, label: shortName(id), p: true })),
+    ...candidateIds.map((id) => ({ key: id, label: shortName(id), p: true })),
   ];
 
   thead.innerHTML = cols
@@ -336,13 +336,13 @@ function shortName(id) {
 
 function renderLegend() {
   const leg = $('#legend');
-  const order = [...state.meta.parties]
-    .map((p) => [p, countOverall(p.id)])
-    .filter(([, c]) => c > 0)
+  const order = [...state.meta.candidates]
+    .map((c) => [c, countOverall(c.partyId)])
+    .filter(([, votes]) => votes > 0)
     .sort((a, b) => b[1] - a[1]);
   leg.innerHTML = '<div class="muted" style="margin-bottom:6px;font-weight:600">Кандидати</div>' +
     '<div class="items">' +
-    order.map(([p]) => `<div class="li"><span class="sw" style="background:${partyColor(p.id)}"></span><span>${candidateName(p.id)}</span></div>`).join('') +
+    order.map(([c]) => `<div class="li"><span class="sw" style="background:${partyColor(c.partyId)}"></span><span>${candidateName(c.partyId)}</span></div>`).join('') +
     '</div>';
 }
 
