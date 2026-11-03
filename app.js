@@ -266,7 +266,7 @@ function renderTable() {
     { key: 'lead', label: 'Победител', align: 'left' },
     { key: 'sections', label: 'Секции' },
     { key: 'valid', label: 'Действителни' },
-    ...candidateIds.map((id) => ({ key: id, label: shortName(id), p: true })),
+    ...candidateIds.map((id) => ({ key: id, label: shortName(id), title: candidateName(id), p: true })),
   ];
 
   thead.innerHTML = cols
@@ -274,7 +274,8 @@ function renderTable() {
       const active = state.sort.col === c.key;
       const arrow = active ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
       const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
-      return `<th data-col="${c.key}"${alignClass}>${c.label}${arrow}</th>`;
+      const titleAttr = c.title ? ` title="${c.title.replace(/"/g, '&quot;')}"` : '';
+      return `<th data-col="${c.key}"${alignClass}${titleAttr}>${c.label}${arrow}</th>`;
     })
     .join('');
 
