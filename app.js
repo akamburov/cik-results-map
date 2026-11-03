@@ -144,7 +144,7 @@ function renderTable() {
 
   const cols = [
     { key: 'name', label: state.unit === 'districts' ? 'Избирателен район' : 'Населено място', align: 'left' },
-    { key: 'lead', label: 'Победител' },
+    { key: 'lead', label: 'Победител', align: 'left' },
     { key: 'sections', label: 'Секции' },
     { key: 'valid', label: 'Действителни' },
     ...partyIds.map((id) => ({ key: id, label: shortName(id), p: true })),
@@ -154,7 +154,8 @@ function renderTable() {
     .map((c) => {
       const active = state.sort.col === c.key;
       const arrow = active ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
-      return `<th data-col="${c.key}">${c.label}${arrow}</th>`;
+      const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
+      return `<th data-col="${c.key}"${alignClass}>${c.label}${arrow}</th>`;
     })
     .join('');
 
@@ -186,13 +187,14 @@ function renderTable() {
     .map((r) => {
       const cells = cols.map((c) => {
         const v = val(r, c.key);
+        const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
         const color = c.p ? ` background:${partyColor(c.key)}` : '';
-        return `<td>${typeof v === 'number' ? fmt(v) : v}</td>`;
+        return `<td${alignClass}>${typeof v === 'number' ? fmt(v) : v}</td>`;
       });
       const leadColor = r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
       // recolor the "Победител" cell + lead id cell
       return `<tr data-name="${rowName(r)}">${cells
-        .map((td, i) => (cols[i].key === 'lead' ? td.replace('<td>', `<td${leadColor}>`) : td))
+        .map((td, i) => (cols[i].key === 'lead' ? td.replace('<td class="col-align-left">', `<td class="col-align-left"${leadColor}>`) : td))
         .join('')}</tr>`;
     })
     .join('') || '<tr><td colspan="9" class="muted">Няма резултати.</td></tr>';
