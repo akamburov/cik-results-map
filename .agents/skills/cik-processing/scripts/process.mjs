@@ -57,8 +57,18 @@ async function readRows(filename, { strip = true } = {}) {
   return rows;
 }
 
-function deterministicColor(seed) {
-  // golden-angle hue spread so adjacent party IDs get visually distinct colors
+// Official / portal colors for primary candidates; others get a golden-angle spread.
+const OFFICIAL_COLORS = {
+  '4': 'rgb(0, 79, 153)',    // Андрей Гюров и Георги Кандев
+  '11': 'rgb(61, 31, 255)',  // Костадин Костадинов и Петър Волгин
+  '17': 'rgb(0, 129, 235)',  // Радостин Василев и Красимир Манов
+  '19': 'rgb(192, 159, 98)', // Ивелин Михайлов и Юлиана Матеева
+  '25': 'rgb(39, 109, 94)',  // Илияна Йотова и Кирил Вълчев
+};
+
+function partyColor(id, seed) {
+  if (OFFICIAL_COLORS[id]) return OFFICIAL_COLORS[id];
+  // golden-angle hue spread for any candidates without an official color
   const hue = (seed * 137.508) % 360;
   return `hsl(${hue.toFixed(1)}, 65%, 45%)`;
 }
@@ -129,7 +139,7 @@ const partyById = new Map(parties.map((p) => [p.id, p]));
 const candidates = (await readRows(candidatesFile)).map(
   ([partyId, partyName, listNo, name]) => ({ partyId, partyName, listNo, name })
 );
-const partyColors = Object.fromEntries(parties.map((p, i) => [p.id, deterministicColor(i + 1)]));
+const partyColors = Object.fromEntries(parties.map((p, i) => [p.id, partyColor(p.id, i + 1)]));
 
 // --- 2. sections ------------------------------------------------------------
 
