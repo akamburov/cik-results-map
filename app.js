@@ -13,10 +13,12 @@ const state = {
   sections: [],
   geo: { districts: null, settlements: null },
   settlementsByEkatte: null, // Map normEkatte -> settlement record
+  tab: 'map',               // 'map' | 'table'
   unit: 'districts',        // 'districts' | 'settlements'
   mapMode: 'choropleth',    // 'choropleth' | 'dots'
   query: '',
   selectedParties: null,    // Set of party ids shown as table columns
+  defaultParties: null,     // Set of default party ids (top 6)
   tableRow: {},            // current row unit name for detail
   sort: { col: 'valid', dir: -1 },
 };
@@ -49,7 +51,10 @@ async function loadData() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6)
     .map(([id]) => id);
-  state.selectedParties = new Set(top);
+  state.defaultParties = new Set(top);
+
+  loadStateFromUrl();
+  syncControlsToState();
   renderChips();
   renderTable();
 }
@@ -58,6 +63,110 @@ function countOverall(partyId) {
   let s = 0;
   for (const d of state.districts) s += (d.votes[partyId] || 0);
   return s;
+}
+
+// ---- url state sync --------------------------------------------------------
+
+function loadStateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+
+  // Tab
+  const view = params.get('view');
+  if (view === 'map' || view === 'table') state.tab = view;
+
+  // Unit
+  const unit = params.get('unit');
+  if (unit === 'districts' || unit === 'settlements') state.unit = unit;
+
+  // Map Mode
+  const mode = params.get('mode');
+  if (mode === 'choropleth' || mode === 'dots') state.mapMode = mode;
+
+  // Query search
+  const q = params.get('q');
+  if (q != null) state.query = q.trim().toLowerCase();
+
+  // Selected candidate columns
+  const candidates = params.get('candidates') || params.get('parties');
+  if (candidates != null) {
+    const list = candidates.split(',').map((s) => s.trim()).filter((id) => state.meta.parties.some((p) => p.id === id));
+    state.selectedParties = new Set(list);
+  } else if (!state.selectedParties) {
+    state.selectedParties = new Set(state.defaultParties);
+  }
+
+  // Sort column & direction
+  const sort = params.get('sort');
+  if (sort) {
+    const dir = params.get('dir') === 'asc' ? 1 : -1;
+    state.sort = { col: sort, dir };
+  }
+}
+
+function syncControlsToState() {
+  // Sync tab active class
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === state.tab + '-view'));
+  const isMap = state.tab === 'map';
+  $('#map-controls').classList.toggle('hidden', !isMap);
+  $('#table-controls').classList.toggle('hidden', isMap);
+  if (isMap) {
+    if (map) setTimeout(() => map.invalidateSize(), 0);
+    $('#legend').classList.remove('hidden');
+  } else {
+    $('#legend').classList.add('hidden');
+  }
+
+  // Sync unit switch buttons
+  document.querySelectorAll('#unit-mode .seg-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.unit === state.unit);
+  });
+
+  // Sync map mode buttons
+  document.querySelectorAll('#map-mode .seg-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === state.mapMode);
+  });
+
+  // Sync search input
+  const searchInput = $('#search');
+  if (searchInput) searchInput.value = state.query || '';
+}
+
+function updateUrl() {
+  const params = new URLSearchParams();
+
+  // Tab (default is map)
+  if (state.tab !== 'map') params.set('view', state.tab);
+
+  // Unit (default is districts)
+  if (state.unit !== 'districts') params.set('unit', state.unit);
+
+  // Map mode (default is choropleth)
+  if (state.mapMode !== 'choropleth') params.set('mode', state.mapMode);
+
+  // Search query
+  if (state.query) params.set('q', state.query);
+
+  // Selected candidate columns (if different from default top 6)
+  if (state.selectedParties) {
+    const isDefault =
+      state.defaultParties &&
+      state.selectedParties.size === state.defaultParties.size &&
+      [...state.selectedParties].every((id) => state.defaultParties.has(id));
+    if (!isDefault) {
+      params.set('candidates', [...state.selectedParties].join(','));
+    }
+  }
+
+  // Sort column & direction (default is valid desc)
+  if (state.sort.col !== 'valid' || state.sort.dir !== -1) {
+    params.set('sort', state.sort.col);
+    params.set('dir', state.sort.dir === 1 ? 'asc' : 'desc');
+  }
+
+  const qs = params.toString();
+  const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  window.history.replaceState(null, '', newUrl);
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -82,17 +191,9 @@ document.querySelectorAll('.tab').forEach((btn) =>
   btn.addEventListener('click', () => showTab(btn.dataset.tab))
 );
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === name + '-view'));
-  const isMap = name === 'map';
-  $('#map-controls').classList.toggle('hidden', !isMap);
-  $('#table-controls').classList.toggle('hidden', isMap);
-  if (isMap) {
-    setTimeout(() => map.invalidateSize(), 0);
-    $('#legend').classList.remove('hidden');
-  } else {
-    $('#legend').classList.add('hidden');
-  }
+  state.tab = name;
+  updateUrl();
+  syncControlsToState();
 }
 
 // ---- filters ---------------------------------------------------------------
@@ -103,12 +204,14 @@ document.querySelectorAll('#unit-mode .seg-btn').forEach((btn) => {
     btn.classList.add('active');
     state.unit = btn.dataset.unit;
     state.sort = { col: 'valid', dir: -1 };
+    updateUrl();
     renderTable();
     renderMapLayers(); // update map layers to the selected unit
   });
 });
 $('#search').addEventListener('input', (e) => {
   state.query = e.target.value.trim().toLowerCase();
+  updateUrl();
   renderTable();
 });
 
@@ -126,6 +229,7 @@ function renderChips() {
     el.addEventListener('click', () => {
       if (state.selectedParties.has(p.id)) state.selectedParties.delete(p.id);
       else state.selectedParties.add(p.id);
+      updateUrl();
       renderChips();
       renderTable();
     });
@@ -170,6 +274,7 @@ function renderTable() {
       const col = th.dataset.col;
       if (state.sort.col === col) state.sort.dir *= -1;
       else state.sort = { col, dir: -1 };
+      updateUrl();
       renderTable();
     })
   );
@@ -257,6 +362,7 @@ function initMap() {
       document.querySelectorAll('#map-mode .seg-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.mapMode = btn.dataset.mode;
+      updateUrl();
       renderMapLayers();
     });
   });
@@ -397,6 +503,16 @@ function openDetail(name) {
   const r = rows().find((x) => rowName(x) === name);
   openRecord(r);
 }
+
+// Back / forward navigation
+window.addEventListener('popstate', () => {
+  if (!state.meta) return;
+  loadStateFromUrl();
+  syncControlsToState();
+  renderChips();
+  renderTable();
+  if (map) renderMapLayers();
+});
 
 // ---- boot ------------------------------------------------------------------
 
