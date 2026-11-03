@@ -118,10 +118,12 @@ plausible (~1.4M), every `sections.json` entry has finite coords, and all `votes
 party `id`s exist in `meta.parties`. Running the skill's `process.mjs` twice yields
 identical output.
 
-## Current state / next steps
+## Roadmap
 
-- [x] CIK preprocessing → JSON (32 regions, ~12.4k mapped sections, ~1.44M votes)
-- [x] Vanilla-JS site shell (map + filterable table) + `serve.mjs`
-- [x] CIK processing extracted to a skill
-- [ ] Section marker clustering & district choropleth (with an external BG district GeoJSON)
-- [ ] GitHub Actions auto-deploy to Pages
+Tracked via GitHub Issues (backlog: `gh issue list --repo akamburov/cik-results-map`):
+
+- #2 — Section marker clustering & district choropleth (external BG district GeoJSON)
+- #1 — GitHub Actions auto-deploy to Pages
+
+Agents: check open issues before starting work; close issues in commit/PR messages
+(`Closes #n`).
