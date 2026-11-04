@@ -246,6 +246,11 @@ for (const s of sections) {
   }
 }
 
+// The abroad region's sections carry scattered embassy coords, so its centroid
+// lands somewhere in Europe. Pin it to a marker position in the Black Sea
+// instead: ~50 km east of the Varna–Burgas coast stretch.
+const ABROAD_MARKER = { lon: 28.5, lat: 42.63 };
+
 const regionAggs = [...districts.values()].map((d) => {
   const entries = Object.entries(d.votes);
   const lead = entries.sort((a, b) => b[1] - a[1])[0] || null;
@@ -254,8 +259,8 @@ const regionAggs = [...districts.values()].map((d) => {
     sections: d.sections,
     counted: d.counted,
     valid: d.valid,
-    lon: +(d.lonSum / d.n).toFixed(5),
-    lat: +(d.latSum / d.n).toFixed(5),
+    lon: d.name.includes('Извън страната') ? ABROAD_MARKER.lon : +(d.lonSum / d.n).toFixed(5),
+    lat: d.name.includes('Извън страната') ? ABROAD_MARKER.lat : +(d.latSum / d.n).toFixed(5),
     lead: lead ? { id: lead[0], votes: lead[1] } : null,
     votes: d.votes,
   };

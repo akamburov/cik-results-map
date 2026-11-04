@@ -1,8 +1,9 @@
 /* app.js — vanilla-JS election results app (map + filterable table).
- * Loads the precomputed JSON from data/ and renders with Leaflet + DOM.
- * No framework, no bundler.
+ * Loads the precomputed JSON from data/ and renders with Leaflet 2.0 + DOM.
+ * No framework, no bundler. ESM module (Leaflet 2.0 importmap in index.html).
  */
-'use strict';
+import { LeafletMap, TileLayer, LayerGroup, CircleMarker, GeoJSON, Canvas } from 'leaflet';
+import { MarkerClusterGroup } from './vendor/leaflet.markercluster/src/index.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) =>
@@ -24,6 +25,57 @@ const state = {
   tableRow: {},            // current row unit name for detail
   sort: { col: 'valid', dir: -1 },
 };
+
+// ---- theme ----------------------------------------------------------------
+
+const THEME_KEY = 'theme';
+
+// Toggle the palette: light/dark, persisted, and mirrored onto the switch.
+// index.html already resolved the initial theme before first paint (stored
+// choice → OS preference → light); this keeps the UI in sync and handles
+// later clicks / OS changes.
+function applyTheme(theme, persist) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('#theme-switch .seg-btn').forEach((b) => {
+    const on = b.dataset.themeValue === theme;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (e) {
+      // storage blocked (private mode / tracking prevention) — theme still applies
+    }
+  }
+  // the uncounted-settlement hatch is baked per palette, so rebuild it
+  stripePattern = null;
+  if (map) {
+    renderMapLayers();
+  }
+}
+
+function initTheme() {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', false);
+  document.querySelectorAll('#theme-switch .seg-btn').forEach((b) =>
+    b.addEventListener('click', () => applyTheme(b.dataset.themeValue, true))
+  );
+  // follow the OS while the user has made no explicit choice
+  const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (mq) {
+    const onChange = (e) => {
+      let stored = null;
+      try {
+        stored = localStorage.getItem(THEME_KEY);
+      } catch (err) {
+        // ignore
+      }
+      if (!stored) applyTheme(e.matches ? 'dark' : 'light', false);
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+  }
+}
 
 // ---- data loading ----------------------------------------------------------
 
@@ -269,18 +321,23 @@ function renderTable() {
   const tbody = $('#tbody');
 
   const cols = [
-    { key: 'name', label: state.unit === 'districts' ? 'Избирателен район' : 'Населено място', align: 'left' },
-    { key: 'lead', label: 'Победител', align: 'left' },
+    { key: 'name', label: state.unit === 'districts' ? 'Избирателен район' : 'Населено място', align: 'left', cls: 'col-name' },
+    { key: 'lead', label: 'Победител', align: 'left', cls: 'col-lead' },
     { key: 'sections', label: 'Секции' },
     { key: 'valid', label: 'Действителни' },
     ...candidateIds.map((id) => ({ key: id, label: shortName(id), title: candidateName(id), p: true })),
   ];
 
+  // cells of these columns are capped in CSS (.cell-text) so very long names
+  // ("Обединено кралство …, Лондон") wrap instead of widening the table
+  const cellClass = (c) => [c.align === 'left' ? 'col-align-left' : '', c.cls || ''].filter(Boolean).join(' ');
+
   thead.innerHTML = cols
     .map((c) => {
       const active = state.sort.col === c.key;
       const arrow = active ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
-      const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
+      const cls = cellClass(c);
+      const alignClass = cls ? ` class="${cls}"` : '';
       const titleAttr = c.title ? ` title="${c.title.replace(/"/g, '&quot;')}"` : '';
       return `<th data-col="${c.key}"${alignClass}${titleAttr}>${c.label}${arrow}</th>`;
     })
@@ -319,21 +376,23 @@ function renderTable() {
   tbody.innerHTML = data
     .map((r) => {
       const cells = cols.map((c) => {
-        const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
+        const cls = cellClass(c);
+        const clsAttr = cls ? ` class="${cls}"` : '';
+        // recolor the "Победител" cell with the winning party's color
+        const leadStyle = c.key === 'lead' && r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
         if (c.key === 'name') {
           // muted region in parentheses disambiguates same-named settlements
           const reg = state.unit === 'settlements' ? regionLabel(r) : '';
           const suffix = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
-          return `<td${alignClass}>${esc(rowName(r))}${suffix}</td>`;
+          const full = esc(reg ? `${rowName(r)} (${reg})` : rowName(r));
+          return `<td${clsAttr}><span class="cell-text" title="${full}">${esc(rowName(r))}${suffix}</span></td>`;
         }
         const v = val(r, c.key);
-        return `<td${alignClass}>${typeof v === 'number' ? fmt(v) : v}</td>`;
+        const text = typeof v === 'number' ? fmt(v) : v;
+        const body = c.cls ? `<span class="cell-text" title="${esc(v)}">${text}</span>` : text;
+        return `<td${clsAttr}${leadStyle}>${body}</td>`;
       });
-      const leadColor = r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
-      // recolor the "Победител" cell + lead id cell
-      return `<tr data-key="${esc(rowKey(r))}">${cells
-        .map((td, i) => (cols[i].key === 'lead' ? td.replace('<td class="col-align-left">', `<td class="col-align-left"${leadColor}>`) : td))
-        .join('')}</tr>`;
+      return `<tr data-key="${esc(rowKey(r))}">${cells.join('')}</tr>`;
     })
     .join('') || '<tr><td colspan="9" class="muted">Няма резултати.</td></tr>';
 
@@ -375,13 +434,22 @@ function updateStats() {
 let map = null;
 let fillLayer = null;   // choropleth (GeoJSON polygons)
 let markerLayer = null; // circle markers / clusters
+let basemap = null;
+
+function createBasemap() {
+  basemap = new TileLayer(
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      maxZoom: 18,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }
+  ).addTo(map);
+}
 
 function initMap() {
-  map = L.map('map', { preferCanvas: true }).setView([42.7, 25.5], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 18,
-  }).addTo(map);
+  map = new LeafletMap('map', { renderer: new Canvas() }).setView([42.7, 25.5], 7);
+  createBasemap();
   renderMapLayers();
 
   document.querySelectorAll('#map-mode .seg-btn').forEach((btn) => {
@@ -419,7 +487,7 @@ function renderChoropleth(layer) {
           return { name: 'София (град) — 23, 24, 25 ИР', votes, valid, sections: recs.reduce((s, r) => s + r.sections, 0) };
         })();
     const leadId = Object.entries(merged.votes).sort((a, b) => b[1] - a[1])[0][0];
-    L.geoJSON(f, {
+    new GeoJSON(f, {
       style: { color: '#ffffff', weight: 1, fillColor: partyColor(leadId), fillOpacity: 0.8 },
     })
       .bindTooltip(
@@ -437,14 +505,15 @@ function renderChoropleth(layer) {
 let stripePattern = null;
 function getStripePattern() {
   if (stripePattern) return stripePattern;
+  const dark = document.documentElement.dataset.theme === 'dark';
   const c = document.createElement('canvas');
   c.width = 12;
   c.height = 12;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(233,236,240,0.55)';
+  x.fillStyle = dark ? 'rgba(20,23,28,0.65)' : 'rgba(233,236,240,0.55)';
   x.fillRect(0, 0, 12, 12);
-  x.strokeStyle = '#a4aab1';
-  x.lineWidth = 1.1;
+  x.strokeStyle = dark ? '#6b7686' : '#8d949c';
+  x.lineWidth = 1.4;
   x.beginPath();
   x.moveTo(0, 12);
   x.lineTo(12, 0);
@@ -456,7 +525,7 @@ function getStripePattern() {
 function settlementChoropleth(layer) {
   for (const f of state.geo.settlements.features) {
     if (f.properties.uncounted) {
-      L.geoJSON(f, {
+      new GeoJSON(f, {
         style: { color: '#b7bdc4', weight: 0.6, fillColor: getStripePattern(), fillOpacity: 0.85, stroke: false },
       })
         .bindTooltip('Землище без образувана секция')
@@ -465,7 +534,7 @@ function settlementChoropleth(layer) {
     }
     const r = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
     if (!r || !r.lead || !r.valid) continue;
-    L.geoJSON(f, {
+    new GeoJSON(f, {
       style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
     })
       .bindTooltip(`${r.name} — ${candidateName(r.lead.id)} · ${fmt(r.valid)}`)
@@ -477,8 +546,8 @@ function settlementChoropleth(layer) {
 function renderMapLayers() {
   if (fillLayer) map.removeLayer(fillLayer);
   if (markerLayer) map.removeLayer(markerLayer);
-  fillLayer = L.layerGroup().addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
+  fillLayer = new LayerGroup().addTo(map);
+  markerLayer = new LayerGroup().addTo(map);
 
   if (state.unit === 'districts') {
     if (state.mapMode === 'choropleth') {
@@ -500,7 +569,7 @@ function renderDistrictPoints(layer) {
   for (const d of state.districts) {
     if (!d.lead) continue;
     const r = 6 + 22 * Math.sqrt(d.valid / maxValid);
-    L.circleMarker([d.lat, d.lon], {
+    new CircleMarker([d.lat, d.lon], {
       radius: r,
       color: '#ffffff',
       weight: 1.5,
@@ -514,7 +583,7 @@ function renderDistrictPoints(layer) {
 }
 
 function renderSettlementPoints(layer) {
-  const cluster = L.markerClusterGroup({
+  const cluster = new MarkerClusterGroup({
     maxClusterRadius: 38,
     showCoverageOnHover: false,
     spiderfyOnMaxZoom: true,
@@ -524,7 +593,7 @@ function renderSettlementPoints(layer) {
   const maxValid = Math.max(...sliced.map((s) => s.valid));
   for (const s of sliced) {
     const r = 3 + 10 * Math.sqrt(s.valid / maxValid);
-    L.circleMarker([s.lat, s.lon], {
+    new CircleMarker([s.lat, s.lon], {
       radius: r,
       color: '#ffffff',
       weight: 0.9,
@@ -551,7 +620,7 @@ function openRecord(r) {
       .map(
         ([pid, v]) =>
           `<div class="row bar"><span>${candidateName(pid)}</span><span class="amt">${fmt(v)}</span></div>` +
-          `<div style="height:4px;background:#e8ebf0"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
+          `<div style="height:4px;background:var(--border)"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
       )
       .join('');
   
@@ -578,6 +647,7 @@ window.addEventListener('popstate', () => {
 // ---- boot ------------------------------------------------------------------
 
 (async () => {
+  initTheme();
   $('#status').textContent = 'Зареждане на данни…';
   try {
     await loadData();
