@@ -31,8 +31,8 @@ so the site is fully static and requires no runtime API.
 - **AI-native development:** developed with Orca's ADE and several different models
   (Munito: DeepSeek V4/V4.1 Flash, Qwen 3.8 27B, GLM 5.3 Flash; Google: Gemini 3.8
   Flash, etc.).
-- **Front end:** vanilla JavaScript + [Leaflet] (vendored under `vendor/`, no CDN),
-  one `index.html` + `app.js` + `style.css`. No React, no bundler, no `npm install`.
+- **Front end:** vanilla JavaScript + [Leaflet] via CDN, one `index.html` + `app.js`
+  + `style.css`. No React, no bundler, no `npm install`.
 - **Preprocessing:** two tiny Node scripts, dependency-free, each bundled in its own
   skill:
   - `.agents/skills/cik-processing/scripts/process.mjs` — CIK CSVs → `data/*.json`
