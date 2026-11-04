@@ -139,7 +139,13 @@ Per **electoral region** aggregate (32 units incl. `32. Извън страна�
 `{ name, sections, counted, valid, lon, lat, lead:{id,votes}|null, votes:{partyId:total} }`.
 
 ### `settlements.json`
-Same shape as `districts.json` but grouped by EKATTE; sorted descending by `valid`.
+Same shape as `districts.json` but grouped by EKATTE, plus a `region` field (the
+settlement's electoral region, same string as `districts.json` `name`) used by the
+viewer to disambiguate same-named settlements; sorted descending by `valid`.
+
+A settlement almost always sits in one region. `гр.София` (EKATTE 68134) is the
+exception — its sections span 23/24/25 ИР, so its `region` is the collapsed label
+`СОФИЯ 23, 24, 25 ИР` (not just the first-seen `23. СОФИЯ 23 ИР`).
 
 ## Verification
 

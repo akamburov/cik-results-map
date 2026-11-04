@@ -5,6 +5,8 @@
 'use strict';
 
 const $ = (sel) => document.querySelector(sel);
+const esc = (v) =>
+  String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 const state = {
   meta: null,
@@ -192,6 +194,10 @@ const getOrderedCandidates = () => {
 };
 const rows = () => (state.unit === 'districts' ? state.districts : state.settlements);
 const rowName = (r) => (state.unit === 'districts' ? r.name : r.name);
+// Region label for display only (strips the "01. " prefix); never part of
+// the search query matching, so typing a region does not filter settlements.
+const regionLabel = (r) => (r.region ? String(r.region).replace(/^\s*\d+\.\s*/, '') : '');
+const rowKey = (r) => (state.unit === 'districts' ? `d:${r.name}` : `s:${r.ekatte}`);
 
 // ---- tabs ------------------------------------------------------------------
 
@@ -254,6 +260,7 @@ function renderTable() {
     const name = (rowName(r) || '').toLowerCase();
     const settle = (r.settlement || r.name || '').toLowerCase();
     const lead = r.lead ? candidateName(r.lead.id).toLowerCase() : '';
+    // NOTE: r.region is intentionally excluded from the search fields.
     return name.includes(q) || settle.includes(q) || lead.includes(q);
   });
 
@@ -301,27 +308,37 @@ function renderTable() {
     const av = val(a, state.sort.col);
     const bv = val(b, state.sort.col);
     if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * state.sort.dir;
-    return String(av).localeCompare(String(bv), 'bg') * state.sort.dir;
+    const cmp = String(av).localeCompare(String(bv), 'bg');
+    // same-named settlements: keep the rows deterministic by region
+    if (cmp === 0 && state.sort.col === 'name') {
+      return regionLabel(a).localeCompare(regionLabel(b), 'bg');
+    }
+    return cmp * state.sort.dir;
   });
 
   tbody.innerHTML = data
     .map((r) => {
       const cells = cols.map((c) => {
-        const v = val(r, c.key);
         const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
-        const color = c.p ? ` background:${partyColor(c.key)}` : '';
+        if (c.key === 'name') {
+          // muted region in parentheses disambiguates same-named settlements
+          const reg = state.unit === 'settlements' ? regionLabel(r) : '';
+          const suffix = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
+          return `<td${alignClass}>${esc(rowName(r))}${suffix}</td>`;
+        }
+        const v = val(r, c.key);
         return `<td${alignClass}>${typeof v === 'number' ? fmt(v) : v}</td>`;
       });
       const leadColor = r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
       // recolor the "Победител" cell + lead id cell
-      return `<tr data-name="${rowName(r)}">${cells
+      return `<tr data-key="${esc(rowKey(r))}">${cells
         .map((td, i) => (cols[i].key === 'lead' ? td.replace('<td class="col-align-left">', `<td class="col-align-left"${leadColor}>`) : td))
         .join('')}</tr>`;
     })
     .join('') || '<tr><td colspan="9" class="muted">Няма резултати.</td></tr>';
 
-  tbody.querySelectorAll('tr[data-name]').forEach((tr) =>
-    tr.addEventListener('click', () => openDetail(tr.dataset.name))
+  tbody.querySelectorAll('tr[data-key]').forEach((tr) =>
+    tr.addEventListener('click', () => openDetail(tr.dataset.key))
   );
 
   renderLegend();
@@ -415,8 +432,37 @@ function renderChoropleth(layer) {
   }
 }
 
+// Reusable diagonal grey hatch pattern for cadastral territories with no polled
+// section (preferCanvas lets us pass a CanvasPattern as the fill).
+let stripePattern = null;
+function getStripePattern() {
+  if (stripePattern) return stripePattern;
+  const c = document.createElement('canvas');
+  c.width = 12;
+  c.height = 12;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(233,236,240,0.55)';
+  x.fillRect(0, 0, 12, 12);
+  x.strokeStyle = '#a4aab1';
+  x.lineWidth = 1.1;
+  x.beginPath();
+  x.moveTo(0, 12);
+  x.lineTo(12, 0);
+  x.stroke();
+  stripePattern = x.createPattern(c, 'repeat');
+  return stripePattern;
+}
+
 function settlementChoropleth(layer) {
   for (const f of state.geo.settlements.features) {
+    if (f.properties.uncounted) {
+      L.geoJSON(f, {
+        style: { color: '#b7bdc4', weight: 0.6, fillColor: getStripePattern(), fillOpacity: 0.85, stroke: false },
+      })
+        .bindTooltip('Землище без образувана секция')
+        .addTo(layer);
+      continue;
+    }
     const r = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
     if (!r || !r.lead || !r.valid) continue;
     L.geoJSON(f, {
@@ -498,7 +544,9 @@ function openRecord(r) {
   panel.classList.remove('hidden');
   const arr = Object.entries(r.votes).sort((a, b) => b[1] - a[1]);
   const max = arr.length ? arr[0][1] : 1;
-  panel.innerHTML = `<h3 style="display:flex; justify-content:space-between; align-items:center;">${r.name} <span class="muted">· ${fmt(r.valid)} действителни</span><button class="close-detail" style="background:none; border:none; font-size:24px; cursor:pointer; padding:0; line-height:1; margin-left:10px; color:inherit;">&times;</button></h3>` +
+  const reg = regionLabel(r);
+  const regHtml = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
+  panel.innerHTML = `<h3 class="detail-head"><span class="detail-title">${esc(r.name)}${regHtml} <span class="muted">· ${fmt(r.valid)} действителни</span></span><button class="close-detail" aria-label="Затвори">&times;</button></h3>` +
     arr
       .map(
         ([pid, v]) =>
@@ -512,8 +560,8 @@ function openRecord(r) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function openDetail(name) {
-  const r = rows().find((x) => rowName(x) === name);
+function openDetail(key) {
+  const r = rows().find((x) => rowKey(x) === key);
   openRecord(r);
 }
 

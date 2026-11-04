@@ -49,13 +49,14 @@ function roundCoords(c) {
 // to ~1 ha) created by topology cleanup. Drop Polygon/MultiPolygon parts whose
 // outer ring is smaller than ~1 ha so they don't render as stray dots.
 const MIN_PART_AREA = 1e-6; // deg² ≈ 1.2 ha
-function ringArea(ring) {
+function signedRingArea(ring) {
   let a = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
   }
-  return Math.abs(a / 2);
+  return a / 2;
 }
+const ringArea = (ring) => Math.abs(signedRingArea(ring));
 
 // Round + drop sliver parts; collapses a single-part MultiPolygon to Polygon.
 function cleanGeometry(geometry) {
@@ -120,21 +121,29 @@ for (const f of districts.features) {
   features.push({ type: 'Feature', properties: { districts: [name] }, geometry: cleanGeometry(f.geometry) });
 }
 
-// 2) Пловдив: district 16 = община Пловдив (PDV22); district 17 = the rest of PDV
-const pdv = municipalities.features.filter((f) => f.properties.nuts3 === 'PDV');
-const pdvCity = pdv.find((f) => f.properties.nuts4 === 'PDV22');
-if (pdvCity) {
-  features.push({ type: 'Feature', properties: { districts: ['16. ПЛОВДИВ град'] }, geometry: cleanGeometry(pdvCity.geometry) });
-}
-const pdvRest = pdv.filter((f) => f.properties.nuts4 !== 'PDV22');
-if (pdvRest.length) {
-  const parts = [];
-  for (const f of pdvRest) {
-    const g = cleanGeometry(f.geometry);
-    if (g.type === 'Polygon') parts.push(g.coordinates);
-    else parts.push(...g.coordinates);
-  }
-  features.push({ type: 'Feature', properties: { districts: ['17. ПЛОВДИВ област'] }, geometry: { type: 'MultiPolygon', coordinates: parts } });
+// 2) Пловдив: district 16 = община Пловдив (PDV22); district 17 = the rest of PDV.
+// Plovdiv city is an enclave inside Plovdiv province. District 17 uses the unified
+// province boundary from provinces.geojson with a hole cut out for district 16,
+// avoiding internal municipality lines.
+const pdvProv = districts.features.find((f) => f.properties.nuts3 === 'PDV');
+const pdvCity = municipalities.features.find((f) => f.properties.nuts4 === 'PDV22');
+if (pdvProv && pdvCity) {
+  const provCleaned = cleanGeometry(pdvProv.geometry);
+  const cityCleaned = cleanGeometry(pdvCity.geometry);
+  const outer = provCleaned.type === 'Polygon' ? provCleaned.coordinates[0] : provCleaned.coordinates[0][0];
+  const hole = cityCleaned.type === 'Polygon' ? cityCleaned.coordinates[0] : cityCleaned.coordinates[0][0];
+  const adjustedHole = signedRingArea(outer) * signedRingArea(hole) > 0 ? [...hole].reverse() : hole;
+
+  features.push({
+    type: 'Feature',
+    properties: { districts: ['17. ПЛОВДИВ област'] },
+    geometry: { type: 'Polygon', coordinates: [outer, adjustedHole] },
+  });
+  features.push({
+    type: 'Feature',
+    properties: { districts: ['16. ПЛОВДИВ град'] },
+    geometry: cityCleaned,
+  });
 }
 
 // 3) София (столица): single merged polygon for 23/24/25 ИР
@@ -159,20 +168,55 @@ writeFileSync(
 // ----------------------------------------------------------------------------
 
 const settlements = read(OUT, 'settlements.json');
-const wanted = new Set(
-  settlements.map((s) => String(s.ekatte).replace(/\D/g, '').padStart(5, '0')).filter((c) => c.length === 5)
-);
-// 6-digit EKATTEs (post-2015 registers) have no polygons anywhere — skipped,
-// the viewer falls back to circle markers for them (~460 entries).
+// 5-digit cadastral EKATTEs that have polled sections in the election export
+// (6-digit foreign ones have no cadastral polygons anywhere → circle markers).
+const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
+const byEkatte = new Map();
+for (const s of settlements) {
+  const ek = normEkatte(s.ekatte);
+  if (ek.length === 5 && !byEkatte.has(ek)) byEkatte.set(ek, s);
+}
 
 const setGeo = read(IN, 'settlements.geojson');
 const geoFeatures = [];
 const seen = new Set();
 for (const f of setGeo.features) {
-  const ek = String(f.properties.ekatte);
-  if (!wanted.has(ek) || seen.has(ek)) continue;
-  seen.add(ek);
-  geoFeatures.push({ type: 'Feature', properties: { ekatte: ek }, geometry: cleanGeometry(f.geometry) });
+  const ek = normEkatte(f.properties.ekatte);
+  const contains = Array.isArray(f.properties.contains)
+    ? f.properties.contains.map(normEkatte)
+    : [];
+  // A cadastral territory can cover several settlements; pick the one with the
+  // most polled votes so towns / municipal centres claim their shared polygon
+  // (e.g. гр. Костенец lives under с. Долна Василица's territory).
+  const members = Array.from(new Set([ek, ...contains]))
+    .map((c) => byEkatte.get(c))
+    .filter(Boolean)
+    .sort((a, b) => b.valid - a.valid);
+
+  if (members.length) {
+    const primary = members[0];
+    if (seen.has(primary.ekatte)) continue;
+    seen.add(primary.ekatte);
+    geoFeatures.push({
+      type: 'Feature',
+      properties:
+        members.length > 1
+          ? { ekatte: primary.ekatte, members: members.map((m) => m.name) }
+          : { ekatte: primary.ekatte },
+      geometry: cleanGeometry(f.geometry),
+    });
+  } else {
+    // Cadastral territory with no polled section this election (deserted hamlets
+    // like с. Подгорие). Keep the polygon so the choropleth has no holes; the
+    // viewer shades it as uncounted.
+    if (seen.has(ek)) continue;
+    seen.add(ek);
+    geoFeatures.push({
+      type: 'Feature',
+      properties: { ekatte: ek, uncounted: true },
+      geometry: cleanGeometry(f.geometry),
+    });
+  }
 }
 
 writeFileSync(
@@ -188,4 +232,3 @@ const B = (n) => n.toLocaleString('en-US');
 console.log('build-geo.mjs — summary');
 console.log(`  districts-geo.json    ${B(features.length)} features (26 provinces + 2 Пловдив + 1 София merged)`);
 console.log(`  settlements-geo.json  ${B(geoFeatures.length)} polygons`);
-console.log(`  settlements matched: ${B(seen.size)}/${B(wanted.size)} (${(100 * seen.size / wanted.size).toFixed(1)}%) — missing fall back to circle markers`);

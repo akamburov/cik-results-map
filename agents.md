@@ -73,7 +73,7 @@ The `cik-processing` skill's `process.mjs` **produces** `data/*.json`; the
 | `districts.json` | one entry per district: `id`, `name`,        | district-level choropleth / table rows                |
 |                  | `lat`, `lng`, `votes[]`, `winnerId`         |                                                       |
 | `settlements.json` | one entry per settlement: `id`, `name`,    | settlement-level table rows                           |
-|                  | `regionId`, `votes[]`, `winnerId`          |                                                       |
+|                  | `region`, `votes[]`, `winnerId`              |                                                       |
 | `districts-geo.json` | `geo-processing` skill's `build-geo.mjs`   | district choropleth polygons; `properties.districts[]`|
 |                  | (boundaries from `Exports/geo/`) → one      | names must match `districts.json` `name`              |
 |                  | feature per district, WGS84 geometry        |                                                       |

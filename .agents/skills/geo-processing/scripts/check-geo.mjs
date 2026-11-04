@@ -156,8 +156,15 @@ for (const f of geoDistricts.features) {
 const allSettlements = settlements.map((s) => normEkatte(s.ekatte));
 const wanted = new Set(allSettlements.filter((e) => e.length === 5));
 const seen = new Set();
+let uncounted = 0;
 for (const f of geoSettlements.features) {
   const ek = String(f.properties.ekatte);
+  if (f.properties.uncounted) {
+    // cadastral territory with no polled section — legitimately absent from
+    // settlements.json; the viewer shades it with a hatch pattern
+    uncounted++;
+    continue;
+  }
   if (!wanted.has(ek)) {
     fail(`settlements-geo references unknown EKATTE ${ek}`);
     continue;
