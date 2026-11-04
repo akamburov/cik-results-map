@@ -231,9 +231,11 @@ for (const s of sections) {
   if (s.ekatte) {
     let sett = settlements.get(s.ekatte);
     if (!sett) {
-      sett = { ekatte: s.ekatte, name: s.settlement, sectionIds: [], sections: 0, valid: 0, votes: {}, lonSum: 0, latSum: 0, n: 0 };
+      // `region` disambiguates same-named settlements in the UI (e.g. с.Лозен)
+      sett = { ekatte: s.ekatte, name: s.settlement, region: s.region, regions: new Set([s.region]), sectionIds: [], sections: 0, valid: 0, votes: {}, lonSum: 0, latSum: 0, n: 0 };
       settlements.set(s.ekatte, sett);
     }
+    sett.regions.add(s.region);
     sett.sections++;
     sett.valid += s.valid;
     sett.lonSum += s.lon;
@@ -259,12 +261,31 @@ const regionAggs = [...districts.values()].map((d) => {
   };
 }).sort((a, b) => a.name.localeCompare(b.name, 'bg'));
 
+// A settlement normally sits in exactly one electoral region. гр.София is the
+// exception: its sections span the capital's three IRs (23/24/25), so keeping
+// only the first-seen region would mislabel the merged row as "СОФИЯ 23 ИР".
+// Collapse multi-region settlements into one label ("СОФИЯ 23, 24, 25 ИР").
+function settlementRegionLabel(regions) {
+  const names = [...regions].sort((a, b) => a.localeCompare(b, 'bg'));
+  if (names.length <= 1) return names[0] ?? '';
+  const parts = names.map((n) => {
+    const m = /^\d+\.\s*(.*?)(?:\s+(\d+)\s+ИР)?$/.exec(n);
+    return { base: m ? m[1] : n, ir: m ? m[2] : null };
+  });
+  const base = parts[0].base;
+  if (parts.every((p) => p.ir && p.base === base)) {
+    return `${base} ${parts.map((p) => p.ir).join(', ')} ИР`;
+  }
+  return names.join(' / ');
+}
+
 const settlementAggs = [...settlements.values()].map((s) => {
   const entries = Object.entries(s.votes);
   const lead = entries.sort((a, b) => b[1] - a[1])[0] || null;
   return {
     ekatte: s.ekatte,
     name: s.name,
+    region: settlementRegionLabel(s.regions),
     sections: s.sections,
     valid: s.valid,
     lon: +(s.lonSum / s.n).toFixed(5),
