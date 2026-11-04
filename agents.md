@@ -99,11 +99,17 @@ If the skill changes an output schema, **update the viewer and this table togeth
 
 ## Front end (vanilla JS)
 
-- **Entry:** `index.html` loads Leaflet from a CDN (`//unpkg.com/leaflet@1.9.x`) and
-  `app.js` as a classic script (no `import`/`export`, no bundler).
+- **Entry:** `index.html` loads Leaflet from `vendor/` (vendored, no CDN) and
+  `app.js` as a classic script (no `import`/`export`, no bundler). Vendoring keeps
+  the map working under browser tracking prevention (unpkg cross-origin requests get
+  blocked) and offline; update `vendor/` only by re-downloading the pinned versions.
 - **Data loading:** `fetch('./data/*.json')`. Preview locally with
   `node scripts/serve.mjs`; opening via `file://` breaks fetch, so the `app.js` status
   line tells the user to start the server. GitHub Pages is the intended host.
+- **Theme:** light/dark toggle (top-right, sun/moon icons) in the topbar. The
+  initial theme is resolved before first paint (stored choice → OS preference →
+  light), persisted to `localStorage`, and OS changes are followed while no explicit
+  choice is set. Palette lives in CSS variables (`:root` / `:root[data-theme="dark"]`).
 - **Layers:** district choropleth + settlement choropleth from
   `data/districts-geo.json` / `data/settlements-geo.json`, with optional circle markers
   / markercluster on top (toggle "Точкови маркери"); a filterable, sortable table

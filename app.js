@@ -25,6 +25,55 @@ const state = {
   sort: { col: 'valid', dir: -1 },
 };
 
+// ---- theme ----------------------------------------------------------------
+
+const THEME_KEY = 'theme';
+
+// Toggle the palette: light/dark, persisted, and mirrored onto the switch.
+// index.html already resolved the initial theme before first paint (stored
+// choice → OS preference → light); this keeps the UI in sync and handles
+// later clicks / OS changes.
+function applyTheme(theme, persist) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll('#theme-switch .seg-btn').forEach((b) => {
+    const on = b.dataset.themeValue === theme;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  if (persist) {
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (e) {
+      // storage blocked (private mode / tracking prevention) — theme still applies
+    }
+  }
+  // the uncounted-settlement hatch is baked per palette, so rebuild it
+  stripePattern = null;
+  if (map) renderMapLayers();
+}
+
+function initTheme() {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', false);
+  document.querySelectorAll('#theme-switch .seg-btn').forEach((b) =>
+    b.addEventListener('click', () => applyTheme(b.dataset.themeValue, true))
+  );
+  // follow the OS while the user has made no explicit choice
+  const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (mq) {
+    const onChange = (e) => {
+      let stored = null;
+      try {
+        stored = localStorage.getItem(THEME_KEY);
+      } catch (err) {
+        // ignore
+      }
+      if (!stored) applyTheme(e.matches ? 'dark' : 'light', false);
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+  }
+}
+
 // ---- data loading ----------------------------------------------------------
 
 async function loadData() {
@@ -269,18 +318,23 @@ function renderTable() {
   const tbody = $('#tbody');
 
   const cols = [
-    { key: 'name', label: state.unit === 'districts' ? 'Избирателен район' : 'Населено място', align: 'left' },
-    { key: 'lead', label: 'Победител', align: 'left' },
+    { key: 'name', label: state.unit === 'districts' ? 'Избирателен район' : 'Населено място', align: 'left', cls: 'col-name' },
+    { key: 'lead', label: 'Победител', align: 'left', cls: 'col-lead' },
     { key: 'sections', label: 'Секции' },
     { key: 'valid', label: 'Действителни' },
     ...candidateIds.map((id) => ({ key: id, label: shortName(id), title: candidateName(id), p: true })),
   ];
 
+  // cells of these columns are capped in CSS (.cell-text) so very long names
+  // ("Обединено кралство …, Лондон") wrap instead of widening the table
+  const cellClass = (c) => [c.align === 'left' ? 'col-align-left' : '', c.cls || ''].filter(Boolean).join(' ');
+
   thead.innerHTML = cols
     .map((c) => {
       const active = state.sort.col === c.key;
       const arrow = active ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
-      const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
+      const cls = cellClass(c);
+      const alignClass = cls ? ` class="${cls}"` : '';
       const titleAttr = c.title ? ` title="${c.title.replace(/"/g, '&quot;')}"` : '';
       return `<th data-col="${c.key}"${alignClass}${titleAttr}>${c.label}${arrow}</th>`;
     })
@@ -319,21 +373,23 @@ function renderTable() {
   tbody.innerHTML = data
     .map((r) => {
       const cells = cols.map((c) => {
-        const alignClass = c.align === 'left' ? ' class="col-align-left"' : '';
+        const cls = cellClass(c);
+        const clsAttr = cls ? ` class="${cls}"` : '';
+        // recolor the "Победител" cell with the winning party's color
+        const leadStyle = c.key === 'lead' && r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
         if (c.key === 'name') {
           // muted region in parentheses disambiguates same-named settlements
           const reg = state.unit === 'settlements' ? regionLabel(r) : '';
           const suffix = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
-          return `<td${alignClass}>${esc(rowName(r))}${suffix}</td>`;
+          const full = esc(reg ? `${rowName(r)} (${reg})` : rowName(r));
+          return `<td${clsAttr}><span class="cell-text" title="${full}">${esc(rowName(r))}${suffix}</span></td>`;
         }
         const v = val(r, c.key);
-        return `<td${alignClass}>${typeof v === 'number' ? fmt(v) : v}</td>`;
+        const text = typeof v === 'number' ? fmt(v) : v;
+        const body = c.cls ? `<span class="cell-text" title="${esc(v)}">${text}</span>` : text;
+        return `<td${clsAttr}${leadStyle}>${body}</td>`;
       });
-      const leadColor = r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
-      // recolor the "Победител" cell + lead id cell
-      return `<tr data-key="${esc(rowKey(r))}">${cells
-        .map((td, i) => (cols[i].key === 'lead' ? td.replace('<td class="col-align-left">', `<td class="col-align-left"${leadColor}>`) : td))
-        .join('')}</tr>`;
+      return `<tr data-key="${esc(rowKey(r))}">${cells.join('')}</tr>`;
     })
     .join('') || '<tr><td colspan="9" class="muted">Няма резултати.</td></tr>';
 
@@ -437,13 +493,14 @@ function renderChoropleth(layer) {
 let stripePattern = null;
 function getStripePattern() {
   if (stripePattern) return stripePattern;
+  const dark = document.documentElement.dataset.theme === 'dark';
   const c = document.createElement('canvas');
   c.width = 12;
   c.height = 12;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(233,236,240,0.55)';
+  x.fillStyle = dark ? 'rgba(43,49,59,0.85)' : 'rgba(233,236,240,0.55)';
   x.fillRect(0, 0, 12, 12);
-  x.strokeStyle = '#a4aab1';
+  x.strokeStyle = dark ? '#4c5666' : '#a4aab1';
   x.lineWidth = 1.1;
   x.beginPath();
   x.moveTo(0, 12);
@@ -551,7 +608,7 @@ function openRecord(r) {
       .map(
         ([pid, v]) =>
           `<div class="row bar"><span>${candidateName(pid)}</span><span class="amt">${fmt(v)}</span></div>` +
-          `<div style="height:4px;background:#e8ebf0"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
+          `<div style="height:4px;background:var(--border)"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
       )
       .join('');
   
@@ -578,6 +635,7 @@ window.addEventListener('popstate', () => {
 // ---- boot ------------------------------------------------------------------
 
 (async () => {
+  initTheme();
   $('#status').textContent = 'Зареждане на данни…';
   try {
     await loadData();
