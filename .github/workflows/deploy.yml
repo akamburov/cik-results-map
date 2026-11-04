@@ -25,26 +25,7 @@ jobs:
       # NOTE: raw CIK exports (Exports/) are gitignored, so we cannot regenerate
       # data/*.json here; instead validate the invariants the viewer relies on.
       - name: Validate data invariants
-        run: node -e "
-          const fs = require('fs');
-          const read = (f) => JSON.parse(fs.readFileSync('data/' + f, 'utf8'));
-          const meta = read('meta.json');
-          const sections = read('sections.json');
-          const districts = read('districts.json');
-          const settlements = read('settlements.json');
-          const partyIds = new Set(meta.parties.map((p) => p.id));
-          if (meta.stats.totalValid < 1400000) throw new Error('totalValid implausible: ' + meta.stats.totalValid);
-          for (const [name, list] of [['sections', sections], ['districts', districts], ['settlements', settlements]]) {
-            for (const e of list) {
-              if (!e.winnerId || !partyIds.has(e.winnerId)) throw new Error(name + ' dangling winnerId: ' + e.id);
-              for (const v of e.votes) if (!partyIds.has(v.id)) throw new Error(name + ' dangling vote id: ' + e.id);
-            }
-          }
-          for (const s of sections) {
-            if (!Number.isFinite(s.lat) || !Number.isFinite(s.lng)) throw new Error('section bad coords: ' + s.id);
-          }
-          console.log('data OK:', sections.length, 'sections,', meta.parties.length, 'parties, totalValid=' + meta.stats.totalValid);
-        " -s
+        run: node scripts/validate-data.mjs
 
   deploy:
     needs: verify-data
