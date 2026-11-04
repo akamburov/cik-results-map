@@ -5,7 +5,7 @@ vice-presidential election** (first round), built from the open data published b
 the Central Election Commission (ЦИК) via `www.cik.bg`.
 
 **No framework, no build step, no backend.** A static site: vanilla JavaScript +
-[Leaflet] (from CDN) on the front end, fed by JSON generated once by a tiny
+[Leaflet] 2.0 (ESM, importmap) on the front end, fed by JSON generated once by a tiny
 dependency-free Node script.
 
 The roadmap lives in the [GitHub Issues](https://github.com/akamburov/cik-results-map/issues);
@@ -31,8 +31,10 @@ so the site is fully static and requires no runtime API.
 - **AI-native development:** developed with Orca's ADE and several different models
   (Munito: DeepSeek V4/V4.1 Flash, Qwen 3.8 27B, GLM 5.3 Flash; Google: Gemini 3.8
   Flash, etc.).
-- **Front end:** vanilla JavaScript + [Leaflet] via CDN, one `index.html` + `app.js`
-  + `style.css`. No React, no bundler, no `npm install`.
+- **Front end:** vanilla JavaScript (ESM) + [Leaflet] 2.0 (`2.0.0-beta.1` via an
+  importmap from jsDelivr) + [Leaflet.markercluster] vendored at
+  `vendor/leaflet.markercluster/`. One `index.html` + `app.js` + `style.css`.
+  No React, no bundler, no `npm install`.
 - **Preprocessing:** two tiny Node scripts, dependency-free, each bundled in its own
   skill:
   - `.agents/skills/cik-processing/scripts/process.mjs` — CIK CSVs → `data/*.json`
@@ -55,9 +57,11 @@ so the site is fully static and requires no runtime API.
 │       └── scripts/
 │           ├── build-geo.mjs     # boundary GeoJSON → data/*-geo.json
 │           └── check-geo.mjs     # verifies geometry against election data
-├── index.html                # static entry point
-├── app.js                    # vanilla-JS app (map + table + filters)
-├── style.css
+├── index.html                # static entry point (Leaflet 2.0 importmap + ESM app.js)
+├── app.js                    # vanilla-JS ESM app (map + table + filters)
+├── style.css                 # light/dark palette via CSS variables
+├── vendor/
+│   └── leaflet.markercluster/  # vendored Leaflet.markercluster (ESM source)
 ├── scripts/
 │   └── serve.mjs             # tiny local static server for preview (Node built-ins)
 ├── data/                     # GENERATED (committed)
@@ -67,6 +71,8 @@ so the site is fully static and requires no runtime API.
 │   ├── settlements.json
 │   ├── districts-geo.json    #   one polygon feature per electoral district
 │   └── settlements-geo.json  #   settlement land polygons keyed by EKATTE
+├── icon.png                  # favicon
+├── LICENSE
 └── Exports/                  # raw CIK export + boundary GeoJSON (gitignored)
 ```
 
@@ -181,3 +187,4 @@ carries **no explicit license file** — confirm/seek permission (or use open-da
 before redistributing the `data/*-geo.json` files beyond this project.
 
 [Leaflet]: https://leafletjs.com
+[Leaflet.markercluster]: https://github.com/Leaflet/Leaflet.markercluster

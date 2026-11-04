@@ -8,7 +8,7 @@ For any agent (pi, Codex, Claude, GitHub Copilot, …) working in this repositor
 
 - **What:** a static web app visualizing the 2026 Bulgarian presidential election
   results on a map + a filterable table.
-- **Stack:** vanilla JS + Leaflet (CDN) front end; one dependency-free Node script
+- **Stack:** vanilla JS (ESM) + Leaflet 2.0 (importmap, CDN) with vendored markercluster front end; one dependency-free Node script
   that preprocesses CIK CSVs into committed JSON.
   **No framework, no build step, no backend, no `npm install`.**
 - **Data pipeline:** handled by the **`cik-processing` skill** — see
@@ -35,9 +35,11 @@ cik-results-map/
 │           ├── build-geo.mjs     # boundary GeoJSON → data/*-geo.json
 │           └── check-geo.mjs     # verifies geometry vs election data
 ├── .gitignore                 # ignores Exports/, node_modules, dist
-├── index.html                 # static entry point (<script src="app.js">)
-├── app.js                     # vanilla-JS app: map + table + filters
-├── style.css
+├── index.html                 # static entry point (Leaflet 2.0 importmap, ESM app.js)
+├── app.js                     # vanilla-JS ESM app: map + table + filters
+├── style.css                  # light/dark palette via CSS variables
+├── vendor/
+│   └── leaflet.markercluster/  # vendored Leaflet.markercluster (ESM source)
 ├── scripts/
 │   └── serve.mjs             # preview: node scripts/serve.mjs [port]
 ├── data/                      # GENERATED (committed): JSON the viewer fetches
