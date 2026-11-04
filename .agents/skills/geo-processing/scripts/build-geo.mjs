@@ -168,20 +168,55 @@ writeFileSync(
 // ----------------------------------------------------------------------------
 
 const settlements = read(OUT, 'settlements.json');
-const wanted = new Set(
-  settlements.map((s) => String(s.ekatte).replace(/\D/g, '').padStart(5, '0')).filter((c) => c.length === 5)
-);
-// 6-digit EKATTEs (post-2015 registers) have no polygons anywhere — skipped,
-// the viewer falls back to circle markers for them (~460 entries).
+// 5-digit cadastral EKATTEs that have polled sections in the election export
+// (6-digit foreign ones have no cadastral polygons anywhere → circle markers).
+const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
+const byEkatte = new Map();
+for (const s of settlements) {
+  const ek = normEkatte(s.ekatte);
+  if (ek.length === 5 && !byEkatte.has(ek)) byEkatte.set(ek, s);
+}
 
 const setGeo = read(IN, 'settlements.geojson');
 const geoFeatures = [];
 const seen = new Set();
 for (const f of setGeo.features) {
-  const ek = String(f.properties.ekatte);
-  if (!wanted.has(ek) || seen.has(ek)) continue;
-  seen.add(ek);
-  geoFeatures.push({ type: 'Feature', properties: { ekatte: ek }, geometry: cleanGeometry(f.geometry) });
+  const ek = normEkatte(f.properties.ekatte);
+  const contains = Array.isArray(f.properties.contains)
+    ? f.properties.contains.map(normEkatte)
+    : [];
+  // A cadastral territory can cover several settlements; pick the one with the
+  // most polled votes so towns / municipal centres claim their shared polygon
+  // (e.g. гр. Костенец lives under с. Долна Василица's territory).
+  const members = Array.from(new Set([ek, ...contains]))
+    .map((c) => byEkatte.get(c))
+    .filter(Boolean)
+    .sort((a, b) => b.valid - a.valid);
+
+  if (members.length) {
+    const primary = members[0];
+    if (seen.has(primary.ekatte)) continue;
+    seen.add(primary.ekatte);
+    geoFeatures.push({
+      type: 'Feature',
+      properties:
+        members.length > 1
+          ? { ekatte: primary.ekatte, members: members.map((m) => m.name) }
+          : { ekatte: primary.ekatte },
+      geometry: cleanGeometry(f.geometry),
+    });
+  } else {
+    // Cadastral territory with no polled section this election (deserted hamlets
+    // like с. Подгорие). Keep the polygon so the choropleth has no holes; the
+    // viewer shades it as uncounted.
+    if (seen.has(ek)) continue;
+    seen.add(ek);
+    geoFeatures.push({
+      type: 'Feature',
+      properties: { ekatte: ek, uncounted: true },
+      geometry: cleanGeometry(f.geometry),
+    });
+  }
 }
 
 writeFileSync(
@@ -197,4 +232,3 @@ const B = (n) => n.toLocaleString('en-US');
 console.log('build-geo.mjs — summary');
 console.log(`  districts-geo.json    ${B(features.length)} features (26 provinces + 2 Пловдив + 1 София merged)`);
 console.log(`  settlements-geo.json  ${B(geoFeatures.length)} polygons`);
-console.log(`  settlements matched: ${B(seen.size)}/${B(wanted.size)} (${(100 * seen.size / wanted.size).toFixed(1)}%) — missing fall back to circle markers`);

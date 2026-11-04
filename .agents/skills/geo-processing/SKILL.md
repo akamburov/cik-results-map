@@ -78,8 +78,13 @@ Bulgaria has 28 provinces but **32 electoral districts**, so the mapping is not 
    sliver parts** whose outer ring is < `1e-6 deg²` (~1 ha); the upstream boundaries
    contain a handful of topology-cleanup artefacts that otherwise render as stray dots.
    A single-part MultiPolygon collapses to a Polygon.
-3. Reads `data/settlements.json`, keeps only 5-digit EKATTEs, and emits one settlement
-   land polygon per known EKATTE (first match wins, duplicates dropped).
+3. Reads `data/settlements.json` and emits one settlement land polygon per cadastral
+   territory. A territory can cover several settlements: its `properties.ekatte` is set
+   to the one with the most polled votes (so towns / municipal centres like
+gr. Костенец
+   claim the shared polygon — see `contains` below), and every member name is listed in
+   `properties.members` when there is more than one. Territories with no polled section
+   at all are kept and marked `uncounted: true` so the choropleth has no holes.
 4. Writes `data/districts-geo.json` and `data/settlements-geo.json`
    (`JSON.stringify`, no pretty-printing, deterministic ordering).
 
@@ -133,10 +138,17 @@ Both files are plain WGS84 `FeatureCollection`s (lon/lat order, Leaflet-ready).
 ] }
 ```
 
-- `properties.ekatte` — 5-digit EKATTE, joins `data/settlements.json` `ekatte`.
-- Current output: **4,052 polygons** of 4,127 five-digit EKATTEs (98.2%). The 451
-  six-digit EKATTEs (post-2015 register) have no published polygons anywhere; the viewer
-  falls back to circle markers for them. Unmatched settlements are expected, not bugs.
+- `properties.ekatte` — 5-digit EKATTE. Joins `data/settlements.json` `ekatte` for
+  polled territories. Cadastral territories that cover several settlements are keyed by
+  the one with the most polled votes (upstream `contains` is resolved here); extra
+  members appear in `properties.members`.
+- `properties.uncounted` — `true` for cadastral territories where no polling section
+  was opened (deserted hamlets like с. Подгорие). These are absent from
+  `data/settlements.json` by design; the viewer shades them with a grey hatch pattern
+  so the map stays gapless.
+- Current output: **4,623 polygons** — 4,056 polled (98.3% of 5-digit EKATTEs) + 567
+  uncounted. The 451 six-digit (post-2015 / abroad) EKATTEs have no published polygons
+  anywhere; the viewer falls back to circle markers for them.
 
 ## Verification (`check-geo.mjs`)
 
@@ -146,8 +158,9 @@ Both files are plain WGS84 `FeatureCollection`s (lon/lat order, Leaflet-ready).
 3. The choropleth colour (argmax of merged votes, Sofia merged) equals that lead — the
    issue #2 acceptance criterion.
 4. Coordinates are finite, inside a Bulgaria bbox, and no ring is degenerate.
-5. `settlements-geo.json` references only known 5-digit EKATTEs, no duplicates, and
-   covers ≥ 95% of them.
+5. `settlements-geo.json` references only known 5-digit EKATTEs (uncounted hatch
+   territories exempt), no duplicate polled polygons, and covers ≥ 95% of five-digit
+   EKATTEs.
 
 `build-geo.mjs` is deterministic: running it twice yields byte-identical files. If a run
 is not reproducible, something is iterating a Map/Set in an unstable way.
