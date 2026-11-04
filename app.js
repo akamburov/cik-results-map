@@ -1,8 +1,9 @@
 /* app.js — vanilla-JS election results app (map + filterable table).
- * Loads the precomputed JSON from data/ and renders with Leaflet + DOM.
- * No framework, no bundler.
+ * Loads the precomputed JSON from data/ and renders with Leaflet 2.0 + DOM.
+ * No framework, no bundler. ESM module (Leaflet 2.0 importmap in index.html).
  */
-'use strict';
+import { LeafletMap, TileLayer, LayerGroup, CircleMarker, GeoJSON, Canvas } from 'leaflet';
+import { MarkerClusterGroup } from './vendor/leaflet.markercluster/src/index.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) =>
@@ -49,7 +50,9 @@ function applyTheme(theme, persist) {
   }
   // the uncounted-settlement hatch is baked per palette, so rebuild it
   stripePattern = null;
-  if (map) renderMapLayers();
+  if (map) {
+    renderMapLayers();
+  }
 }
 
 function initTheme() {
@@ -431,13 +434,22 @@ function updateStats() {
 let map = null;
 let fillLayer = null;   // choropleth (GeoJSON polygons)
 let markerLayer = null; // circle markers / clusters
+let basemap = null;
+
+function createBasemap() {
+  basemap = new TileLayer(
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      maxZoom: 18,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }
+  ).addTo(map);
+}
 
 function initMap() {
-  map = L.map('map', { preferCanvas: true }).setView([42.7, 25.5], 7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 18,
-  }).addTo(map);
+  map = new LeafletMap('map', { renderer: new Canvas() }).setView([42.7, 25.5], 7);
+  createBasemap();
   renderMapLayers();
 
   document.querySelectorAll('#map-mode .seg-btn').forEach((btn) => {
@@ -475,7 +487,7 @@ function renderChoropleth(layer) {
           return { name: 'София (град) — 23, 24, 25 ИР', votes, valid, sections: recs.reduce((s, r) => s + r.sections, 0) };
         })();
     const leadId = Object.entries(merged.votes).sort((a, b) => b[1] - a[1])[0][0];
-    L.geoJSON(f, {
+    new GeoJSON(f, {
       style: { color: '#ffffff', weight: 1, fillColor: partyColor(leadId), fillOpacity: 0.8 },
     })
       .bindTooltip(
@@ -498,10 +510,10 @@ function getStripePattern() {
   c.width = 12;
   c.height = 12;
   const x = c.getContext('2d');
-  x.fillStyle = dark ? 'rgba(43,49,59,0.85)' : 'rgba(233,236,240,0.55)';
+  x.fillStyle = dark ? 'rgba(20,23,28,0.65)' : 'rgba(233,236,240,0.55)';
   x.fillRect(0, 0, 12, 12);
-  x.strokeStyle = dark ? '#4c5666' : '#a4aab1';
-  x.lineWidth = 1.1;
+  x.strokeStyle = dark ? '#6b7686' : '#8d949c';
+  x.lineWidth = 1.4;
   x.beginPath();
   x.moveTo(0, 12);
   x.lineTo(12, 0);
@@ -513,7 +525,7 @@ function getStripePattern() {
 function settlementChoropleth(layer) {
   for (const f of state.geo.settlements.features) {
     if (f.properties.uncounted) {
-      L.geoJSON(f, {
+      new GeoJSON(f, {
         style: { color: '#b7bdc4', weight: 0.6, fillColor: getStripePattern(), fillOpacity: 0.85, stroke: false },
       })
         .bindTooltip('Землище без образувана секция')
@@ -522,7 +534,7 @@ function settlementChoropleth(layer) {
     }
     const r = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
     if (!r || !r.lead || !r.valid) continue;
-    L.geoJSON(f, {
+    new GeoJSON(f, {
       style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
     })
       .bindTooltip(`${r.name} — ${candidateName(r.lead.id)} · ${fmt(r.valid)}`)
@@ -534,8 +546,8 @@ function settlementChoropleth(layer) {
 function renderMapLayers() {
   if (fillLayer) map.removeLayer(fillLayer);
   if (markerLayer) map.removeLayer(markerLayer);
-  fillLayer = L.layerGroup().addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
+  fillLayer = new LayerGroup().addTo(map);
+  markerLayer = new LayerGroup().addTo(map);
 
   if (state.unit === 'districts') {
     if (state.mapMode === 'choropleth') {
@@ -557,7 +569,7 @@ function renderDistrictPoints(layer) {
   for (const d of state.districts) {
     if (!d.lead) continue;
     const r = 6 + 22 * Math.sqrt(d.valid / maxValid);
-    L.circleMarker([d.lat, d.lon], {
+    new CircleMarker([d.lat, d.lon], {
       radius: r,
       color: '#ffffff',
       weight: 1.5,
@@ -571,7 +583,7 @@ function renderDistrictPoints(layer) {
 }
 
 function renderSettlementPoints(layer) {
-  const cluster = L.markerClusterGroup({
+  const cluster = new MarkerClusterGroup({
     maxClusterRadius: 38,
     showCoverageOnHover: false,
     spiderfyOnMaxZoom: true,
@@ -581,7 +593,7 @@ function renderSettlementPoints(layer) {
   const maxValid = Math.max(...sliced.map((s) => s.valid));
   for (const s of sliced) {
     const r = 3 + 10 * Math.sqrt(s.valid / maxValid);
-    L.circleMarker([s.lat, s.lon], {
+    new CircleMarker([s.lat, s.lon], {
       radius: r,
       color: '#ffffff',
       weight: 0.9,
