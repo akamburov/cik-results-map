@@ -14,3 +14,6 @@ Exports/
 .idea/
 *.log
 .DS_Store
+
+# AI agent tooling
+.pi/

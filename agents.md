@@ -142,9 +142,17 @@ Deploying to a sub-path (e.g. `/cik-results-map/`)? Keep fetch paths relative
   `build-geo.mjs` → `data/*-geo.json`).
 - **Harness (pi):** this repo's domain knowledge lives in the skills
   (`cik-processing` for the CIK pipeline, `geo-processing` for the choropleth
-  geometry) — consult them before editing either pipeline. Optionally wire a
-  **hook** (pre-commit or pi hook) that runs `process.mjs` + `check-geo.mjs` and checks
-  the JSON is in sync, so committed data never drifts from the scripts.
+  geometry) — consult them before editing either pipeline. 
+  - Optionally wire a
+    **hook** (pre-commit or pi hook) that runs `process.mjs`, `build-geo.mjs`, `check-geo.mjs`,
+    and `validate-data.mjs` (skipping the first two if `Exports/` is missing) and checks
+    the JSON is in sync, so committed data never drifts from the scripts. 
+  - Note: the
+    GitHub deploy workflow does not run `process.mjs` or `build-geo.mjs` because the raw
+    exports are gitignored; it only validates the committed data with `validate-data.mjs`
+    and `check-geo.mjs`.
+- **OpenSpec:** the project uses OpenSpec for software design specifications (SDD); it must be installed on the system and in any agent/project working on changes.
+- Backlog and feature requests are tracked as GitHub Issues (`gh issue list --repo akamburov/cik-results-map`); consult before starting new work.
 - User-facing strings, party names, and region names are **Bulgarian**; code
   identifiers and comments are English.
 
@@ -160,9 +168,4 @@ Choropleth geometry: `node .agents/skills/geo-processing/scripts/check-geo.mjs`
 (districts covered once, winners match, coordinates sane, settlement coverage ≥ 95%).
 Run it after any change to `build-geo.mjs` or `data/*-geo.json`.
 
-## Roadmap
 
-Tracked via GitHub Issues (backlog: `gh issue list --repo akamburov/cik-results-map`):
-
-Agents: check open issues before starting work; close issues in commit/PR messages
-(`Closes #n`).

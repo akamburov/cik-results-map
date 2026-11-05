@@ -28,9 +28,12 @@ so the site is fully static and requires no runtime API.
 
 ## Tech stack (deliberately minimal)
 
-- **AI-native development:** developed with Orca's ADE and several different models
-  (Munito: DeepSeek V4/V4.1 Flash, Qwen 3.8 27B, GLM 5.3 Flash; Google: Gemini 3.8
-  Flash, etc.).
+- **AI-native development:**
+  - [Orca ADE](https://www.onorca.dev/)
+  - [Pi](https://pi.dev) Agent Harness
+  - Models hosted by Munito (DeepSeek V4 and V4.1 Flash, Qwen 3.8 27B, GLM 5.3 Flash) and Google (Gemini 3.8
+    Flash)
+  - [OpenSpec](https://openspec.dev) for software design specifications (SDD) and the 
 - **Front end:** vanilla JavaScript (ESM) + [Leaflet] 2.0 (`2.0.0-beta.1` via an
   importmap from jsDelivr) + [Leaflet.markercluster] vendored at
   `vendor/leaflet.markercluster/`. One `index.html` + `app.js` + `style.css`.

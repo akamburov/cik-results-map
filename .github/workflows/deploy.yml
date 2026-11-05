@@ -26,6 +26,8 @@ jobs:
       # data/*.json here; instead validate the invariants the viewer relies on.
       - name: Validate data invariants
         run: node scripts/validate-data.mjs
+      - name: Validate choropleth geometry
+        run: node .agents/skills/geo-processing/scripts/check-geo.mjs
 
   deploy:
     needs: verify-data
