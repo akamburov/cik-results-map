@@ -68,7 +68,8 @@ The `cik-processing` skill's `process.mjs` **produces** `data/*.json`; the
 | File             | Producer (skill)                              | Consumer (viewer)                                      |
 |------------------|-----------------------------------------------|-------------------------------------------------------|
 | `meta.json`      | parties list, candidate list, region names,   | legend colors, filter options, UI labels              |
-|                  | `stats.totalValid`, `stats.totalDistricts`   |                                                       |
+|                  | `stats.totalSections`, `stats.totalValid`,     |                                                       |
+|                  | `stats.sectionsWithCoords`                     |                                                       |
 | `sections.json`  | one entry per mapped ballot box: `id`,       | map markers (lat/lng), winner color, per-party votes  |
 |                  | `name`, `lat`, `lng`, `regionId`,            |                                                       |
 |                  | `votes[] {id, name, votes}`, `winnerId`     |                                                       |
@@ -86,7 +87,8 @@ The `cik-processing` skill's `process.mjs` **produces** `data/*.json`; the
 
 1. Every `votes[].id` references a `meta.parties[i].id` — no dangling ids.
 2. Every `sections.json` entry has finite `lat`/`lng` (no null, no NaN).
-3. `meta.stats.totalValid` is a plausible total (≳ 1.4M for 2026 BG election).
+3. `meta.stats.totalValid` is a plausible total (≈ 1,454,357 for 2026 BG election,
+   matching CIK's official 8.1 within ≤2) and `totalSections` = 12,719.
 4. Running `process.mjs` twice produces byte-identical output (deterministic).
 5. `districts.json` / `settlements.json` are derived from `sections.json` — the viewer
    never sums sections itself; it reads the pre-aggregated JSON.
@@ -148,10 +150,11 @@ Deploying to a sub-path (e.g. `/cik-results-map/`)? Keep fetch paths relative
 
 ## Verification
 
-Covered by the `cik-processing` skill. In short: `meta.stats.totalValid` should be
-plausible (~1.4M), every `sections.json` entry has finite coords, and all `votes`
-party `id`s exist in `meta.parties`. Running the skill's `process.mjs` twice yields
-identical output.
+Covered by the `cik-processing` skill. In short: `meta.stats.totalSections` = 12,719
+and `meta.stats.totalValid` ≈ 1,454,357 (official 8.1 = 1,454,359), every
+`sections.json` entry has finite coords (12,364 of 12,719 sections; no-coord
+sections are still counted in the totals), and all `votes` party `id`s exist in
+`meta.parties`. Running the skill's `process.mjs` twice yields identical output.
 
 Choropleth geometry: `node .agents/skills/geo-processing/scripts/check-geo.mjs`
 (districts covered once, winners match, coordinates sane, settlement coverage ≥ 95%).

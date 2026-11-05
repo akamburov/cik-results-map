@@ -144,21 +144,27 @@ const candidates = (await readRows(candidatesFile)).map(
 const partyColors = Object.fromEntries(parties.map((p, i) => [p.id, partyColor(p.id, i + 1)]));
 
 // --- 2. sections ------------------------------------------------------------
-
+// Read *every* section (with or without coordinates). The coordinate gate
+// decides only whether a section can be *plotted* on the map — it must never
+// decide whether it is *counted*. CIK leaves lon/lat blank for ~355 sections
+// (mostly inland mobile boxes / ПСИК / special sections, not just foreign ones);
+// those are still real sections with real votes and must be in every total.
 const sections = [];
 {
   for (const f of await readRows(sectionsFile)) {
     const lon = parseFloat(f[6]);
     const lat = parseFloat(f[7]);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue; // skip no-coord
+    const hasCoords = Number.isFinite(lon) && Number.isFinite(lat);
     sections.push({
       id: f[0],
       district: f[1], // 01–28
       region: f[2], // electoral region name (e.g. "01. БЛАГОЕВГРАД" / "32. Извън страната")
       ekatte: f[3],
       settlement: f[4],
-      lon,
-      lat,
+      hasCoords,
+      // coords present only when finite; no-coord sections are still counted,
+      // they just can't be placed as a map marker
+      ...(hasCoords ? { lon, lat } : {}),
       mobile: f[8] === '1',
       sea: f[9] === '1',
       machines: parseInt(f[10] ?? '0', 10) || 0,
@@ -166,7 +172,8 @@ const sections = [];
     });
   }
 }
-console.log(`  sections with coords: ${sections.length}`);
+const coordSections = sections.filter((s) => s.hasCoords);
+console.log(`  sections: ${sections.length} (with coords: ${coordSections.length})`);
 
 // --- 3. votes --------------------------------------------------------------
 
@@ -222,9 +229,13 @@ for (const s of sections) {
   d.sections++;
   d.counted++;
   d.valid += s.valid;
-  d.lonSum += s.lon;
-  d.latSum += s.lat;
-  d.n++;
+  // the centroid is a mean of *mapped* sections only; no-coord sections are
+  // counted (valid/votes) but contribute no coordinates (they can't be plotted)
+  if (s.hasCoords) {
+    d.lonSum += s.lon;
+    d.latSum += s.lat;
+    d.n++;
+  }
   for (const [pid, v] of Object.entries(s.votes)) d.votes[pid] = (d.votes[pid] || 0) + v;
 
   // --- settlement aggregate (by EKATTE) ---
@@ -238,9 +249,11 @@ for (const s of sections) {
     sett.regions.add(s.region);
     sett.sections++;
     sett.valid += s.valid;
-    sett.lonSum += s.lon;
-    sett.latSum += s.lat;
-    sett.n++;
+    if (s.hasCoords) {
+      sett.lonSum += s.lon;
+      sett.latSum += s.lat;
+      sett.n++;
+    }
     if (sett.sectionIds.length < 5) sett.sectionIds.push(s.id);
     for (const [pid, v] of Object.entries(s.votes)) sett.votes[pid] = (sett.votes[pid] || 0) + v;
   }
@@ -259,8 +272,8 @@ const regionAggs = [...districts.values()].map((d) => {
     sections: d.sections,
     counted: d.counted,
     valid: d.valid,
-    lon: d.name.includes('Извън страната') ? ABROAD_MARKER.lon : +(d.lonSum / d.n).toFixed(5),
-    lat: d.name.includes('Извън страната') ? ABROAD_MARKER.lat : +(d.latSum / d.n).toFixed(5),
+    lon: d.name.includes('Извън страната') ? ABROAD_MARKER.lon : d.n ? +(d.lonSum / d.n).toFixed(5) : 0,
+    lat: d.name.includes('Извън страната') ? ABROAD_MARKER.lat : d.n ? +(d.latSum / d.n).toFixed(5) : 0,
     lead: lead ? { id: lead[0], votes: lead[1] } : null,
     votes: d.votes,
   };
@@ -293,8 +306,8 @@ const settlementAggs = [...settlements.values()].map((s) => {
     region: settlementRegionLabel(s.regions),
     sections: s.sections,
     valid: s.valid,
-    lon: +(s.lonSum / s.n).toFixed(5),
-    lat: +(s.latSum / s.n).toFixed(5),
+    lon: s.n ? +(s.lonSum / s.n).toFixed(5) : 0,
+    lat: s.n ? +(s.latSum / s.n).toFixed(5) : 0,
     lead: lead ? { id: lead[0], votes: lead[1] } : null,
     votes: s.votes,
   };
@@ -303,7 +316,10 @@ const settlementAggs = [...settlements.values()].map((s) => {
 // --- 5. meta + stats --------------------------------------------------------
 
 const countedSections = sections.filter((s) => s.valid).length;
-const totalValid = regionAggs.reduce((acc, r) => acc + r.valid, 0);
+// total valid votes over ALL sections (coord and no-coord alike) — this is the
+// number that must match CIK's official 8.1 "действителни гласове за листи".
+const totalValid = sections.reduce((acc, s) => acc + (s.valid || 0), 0);
+const sectionsWithCoords = coordSections.length;
 const leadOverall = Object.values(regionAggs)
   .reduce((acc, r) => {
     for (const [pid, v] of Object.entries(r.votes)) acc[pid] = (acc[pid] || 0) + v;
@@ -318,7 +334,11 @@ const meta = {
   candidates,
   partyColors,
   stats: {
-    sectionsWithCoords: sections.length,
+    // total sections in the export (matches CIK's "Брой на СИ")
+    totalSections: sections.length,
+    // sections that have geo coords and can be placed as map markers
+    sectionsWithCoords,
+    // sections whose votes were counted (all of them, coord or not)
     countedSections,
     uncountedSections: sections.length - countedSections,
     totalValid,
@@ -329,14 +349,16 @@ const meta = {
 // --- 6. write ---------------------------------------------------------------
 
 mkdirSync(OUT_DIR, { recursive: true });
-const secSize = writeJson('sections.json', sections);
+// only coord sections are map markers; strip the internal hasCoords flag so the
+// published schema matches the documented one
+const secSize = writeJson('sections.json', coordSections.map(({ hasCoords, ...rest }) => rest));
 const disSize = writeJson('districts.json', regionAggs);
 const setSize = writeJson('settlements.json', settlementAggs);
 const metaSize = writeJson('meta.json', meta);
 
 console.log('\n[process] wrote:');
 console.log(`  data/meta.json        ${metaSize} B`);
-console.log(`  data/sections.json    ${secSize} B  (${sections.length} sections)`);
+console.log(`  data/sections.json    ${secSize} B  (${sectionsWithCoords} of ${sections.length} sections mapped)`);
 console.log(`  data/districts.json   ${disSize} B  (${regionAggs.length} regions)`);
 console.log(`  data/settlements.json ${setSize} B  (${settlementAggs.length} settlements)`);
 console.log('\n[process] summary:');

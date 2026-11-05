@@ -2,7 +2,7 @@
  * Loads the precomputed JSON from data/ and renders with Leaflet 2.0 + DOM.
  * No framework, no bundler. ESM module (Leaflet 2.0 importmap in index.html).
  */
-import { LeafletMap, TileLayer, LayerGroup, CircleMarker, GeoJSON, Canvas } from 'leaflet';
+import { LeafletMap, TileLayer, LayerGroup, CircleMarker, GeoJSON, Canvas, DomEvent } from 'leaflet';
 import { MarkerClusterGroup } from './vendor/leaflet.markercluster/src/index.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -24,6 +24,9 @@ const state = {
   defaultCandidates: null,  // Set of default candidate numbers (top 6 by votes)
   tableRow: {},            // current row unit name for detail
   sort: { col: 'valid', dir: -1 },
+  popupExpanded: true,       // popup detail sheet open/closed
+  popupMode: 'overview',     // 'overview' (national) | 'record'
+  popupUserSet: false,        // true once the user toggled the popup manually
 };
 
 // ---- theme ----------------------------------------------------------------
@@ -158,27 +161,49 @@ function loadStateFromUrl() {
 }
 
 function syncControlsToState() {
-  // Sync tab active class
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.tab));
+  // Sync tab active class + pressed state
+  document.querySelectorAll('.tab').forEach((b) => {
+    const on = b.dataset.tab === state.tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === state.tab + '-view'));
   const isMap = state.tab === 'map';
   $('#map-controls').classList.toggle('hidden', !isMap);
   $('#table-controls').classList.toggle('hidden', isMap);
-  if (isMap) {
-    if (map) setTimeout(() => map.invalidateSize(), 0);
-    $('#legend').classList.remove('hidden');
-  } else {
-    $('#legend').classList.add('hidden');
+  // Returning to the map tab: the container was display:none (0 size), so the
+  // canvas vector layers were not drawn. Re-invalidate the size and re-render
+  // the layers so the polygons/points actually appear (no click needed), then
+  // restore the view we captured when we left — we do NOT re-fit, so the map
+  // stays exactly where the user had it (no move to a new centre).
+  if (isMap && map) {
+    const restore = savedMapView;
+    savedMapView = null;
+    // Restore the view synchronously (before the map's first paint) so it never
+    // shows a stale/default centre while the layers re-lay out (fixes the
+    // Istanbul flash, worst in the dots/marker-cluster view).
+    if (restore) map.setView(restore.center, restore.zoom, { animate: false });
+    setTimeout(() => {
+      map.invalidateSize();
+      renderMapLayers();
+    }, 0);
+  } else if (map) {
+    // Leaving the map tab: capture the current view to restore on return.
+    savedMapView = { center: map.getCenter(), zoom: map.getZoom() };
   }
 
   // Sync unit switch buttons
   document.querySelectorAll('#unit-mode .seg-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.unit === state.unit);
+    const on = b.dataset.unit === state.unit;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
   });
 
   // Sync map mode buttons
   document.querySelectorAll('#map-mode .seg-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.mode === state.mapMode);
+    const on = b.dataset.mode === state.mapMode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
   });
 
   // Sync search input
@@ -266,8 +291,9 @@ function showTab(name) {
 
 document.querySelectorAll('#unit-mode .seg-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('#unit-mode .seg-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('#unit-mode .seg-btn').forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
     btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
     state.unit = btn.dataset.unit;
     state.sort = { col: 'valid', dir: -1 };
     updateUrl();
@@ -399,9 +425,6 @@ function renderTable() {
   tbody.querySelectorAll('tr[data-key]').forEach((tr) =>
     tr.addEventListener('click', () => openDetail(tr.dataset.key))
   );
-
-  renderLegend();
-  updateStats();
 }
 
 function shortName(id) {
@@ -409,24 +432,15 @@ function shortName(id) {
   return n.length > 24 ? n.slice(0, 22) + '…' : n;
 }
 
-// ---- legend & stats --------------------------------------------------------
+// ---- status ----------------------------------------------------------------
 
-function renderLegend() {
-  const leg = $('#legend');
-  const order = [...state.meta.candidates]
-    .map((c) => [c, countOverall(c.partyId)])
-    .filter(([, votes]) => votes > 0)
-    .sort((a, b) => b[1] - a[1]);
-  leg.innerHTML = '<div class="muted" style="margin-bottom:6px;font-weight:600">Кандидати</div>' +
-    '<div class="items">' +
-    order.map(([c]) => `<div class="li"><span class="sw" style="background:${partyColor(c.partyId)}"></span><span>${candidateName(c.partyId)}</span></div>`).join('') +
-    '</div>';
-}
-
-function updateStats() {
-  const s = state.meta.stats;
-  $('#stats-line').textContent =
-    `${fmt(s.countedSections)} секции · ${fmt(s.totalValid)} действителни гласа · Лидер: ${s.leader ? candidateName(s.leader.id) : '—'}`;
+// Show a transient status/error message only while it has content; hidden
+// otherwise (replaces the old always-visible footer stats line).
+function setStatus(msg) {
+  const el = $('#status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('hidden', !msg);
 }
 
 // ---- map -------------------------------------------------------------------
@@ -448,19 +462,24 @@ function createBasemap() {
 }
 
 function initMap() {
-  map = new LeafletMap('map', { renderer: new Canvas() }).setView([42.7, 25.5], 7);
+  map = new LeafletMap('map', { renderer: new Canvas() });
   createBasemap();
   renderMapLayers();
 
   document.querySelectorAll('#map-mode .seg-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#map-mode .seg-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('#map-mode .seg-btn').forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
       state.mapMode = btn.dataset.mode;
       updateUrl();
       renderMapLayers();
     });
   });
+
+  // Clicking empty map area returns to the national overview. Region,
+  // settlement and marker clicks stop propagation, so they never reach here.
+  map.on('click', () => { if (!mapClickSuppressed) openOverview(); });
 }
 
 const sumVotes = (recs) => {
@@ -495,7 +514,7 @@ function renderChoropleth(layer) {
           ? `${merged.name}<br>` + recs.map((r) => `${r.name.split('.')[0]} ИР: ${candidateName(r.lead.id)}`).join(' · ')
           : `${rowName(merged)} — ${candidateName(leadId)}`
       )
-      .on('click', () => openRecord(merged))
+      .on('click', (e) => { openRecord(merged); DomEvent.stopPropagation(e); })
       .addTo(layer);
   }
 }
@@ -538,7 +557,7 @@ function settlementChoropleth(layer) {
       style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
     })
       .bindTooltip(`${r.name} — ${candidateName(r.lead.id)} · ${fmt(r.valid)}`)
-      .on('click', () => openRecord(r))
+      .on('click', (e) => { openRecord(r); DomEvent.stopPropagation(e); })
       .addTo(layer);
   }
 }
@@ -577,7 +596,7 @@ function renderDistrictPoints(layer) {
       fillOpacity: 0.9,
     })
       .bindTooltip(`${d.name} — ${candidateName(d.lead.id)}`)
-      .on('click', () => openRecord(d))
+      .on('click', (e) => { openRecord(d); DomEvent.stopPropagation(e); })
       .addTo(layer);
   }
 }
@@ -601,33 +620,119 @@ function renderSettlementPoints(layer) {
       fillOpacity: 0.85,
     })
       .bindTooltip(`${s.name} — ${candidateName(s.lead.id)}`)
-      .on('click', () => openRecord(s))
+      .on('click', (e) => { openRecord(s); DomEvent.stopPropagation(e); })
       .addTo(cluster);
   }
   layer.addLayer(cluster);
 }
 
+// Suppress a map-background click that fires in the same event as a feature
+// click, so a record is not immediately reset back to the overview.
+let mapClickSuppressed = false;
+
+// The map view captured while it is hidden (table tab), restored when we return
+// to the map tab instead of re-fitting (so the map does not move).
+let savedMapView = null;
+
 function openRecord(r) {
   if (!r) return;
-  const panel = $('#map-detail');
-  panel.classList.remove('hidden');
-  const arr = Object.entries(r.votes).sort((a, b) => b[1] - a[1]);
-  const max = arr.length ? arr[0][1] : 1;
+  state.popupMode = 'record';
+  mapClickSuppressed = true;
+  setTimeout(() => { mapClickSuppressed = false; }, 0);
   const reg = regionLabel(r);
-  const regHtml = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
-  panel.innerHTML = `<h3 class="detail-head"><span class="detail-title">${esc(r.name)}${regHtml} <span class="muted">· ${fmt(r.valid)} действителни</span></span><button class="close-detail" aria-label="Затвори">&times;</button></h3>` +
-    arr
-      .map(
-        ([pid, v]) =>
-          `<div class="row bar"><span>${candidateName(pid)}</span><span class="amt">${fmt(v)}</span></div>` +
-          `<div style="height:4px;background:var(--border)"><div style="height:4px;width:${(100 * v / max).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`
-      )
-      .join('');
-  
-  panel.querySelector('.close-detail').onclick = () => panel.classList.add('hidden');
-  
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const regTxt = reg ? ` (${reg})` : '';
+  $('#detail-title').textContent = `${r.name}${regTxt} · ${fmt(r.sections)} секции · ${fmt(r.valid)} действителни гласа`;
+  $('#detail-back').classList.remove('hidden');
+  const arr = Object.entries(r.votes);
+  const max = arr.length ? Math.max(...arr.map(([, v]) => v)) : 1;
+  $('#map-detail-body').innerHTML = candidateRowsHtml(r.votes, max);
+  setPopupExpanded(true, true);
 }
+
+// Shared per-candidate row markup (swatch + ellipsised name + amount + bar),
+// used by both the national overview and a single record. `maxvalue` scales
+// the bars; `shareOf` (optional) appends the candidate's share of that total.
+function candidateRowsHtml(votes, maxvalue, shareOf) {
+  return Object.entries(votes)
+    .sort((a, b) => b[1] - a[1])
+    .map(([pid, v]) => {
+      const share = shareOf ? ` · ${(100 * v / shareOf).toFixed(1)}%` : '';
+      return `<div class="row bar"><span class="sw" style="background:${partyColor(pid)}"></span>` +
+        `<span class="cname" title="${esc(candidateName(pid))}">${esc(candidateName(pid))}</span>` +
+        `<span class="amt">${fmt(v)}${share}</span></div>` +
+        `<div style="height:4px;background:var(--border)"><div style="height:4px;width:${(100 * v / maxvalue).toFixed(1)}%;background:${partyColor(pid)}"></div></div>`;
+    })
+    .join('');
+}
+
+// National overview: the legend itself, with each candidate's share of the
+// whole country. Replaces the removed floating legend and footer stats.
+function openOverview() {
+  state.popupMode = 'overview';
+  const s = state.meta.stats;
+  $('#detail-title').textContent = `Общо · ${fmt(s.countedSections)} секции · ${fmt(s.totalValid)} действителни гласа`;
+  $('#detail-back').classList.add('hidden');
+  const votes = {};
+  for (const c of state.meta.candidates) votes[c.partyId] = countOverall(c.partyId);
+  const max = Math.max(...Object.values(votes), 1);
+  $('#map-detail-body').innerHTML = candidateRowsHtml(votes, max, s.totalValid);
+}
+
+// Flatten a GeoJSON geometry's [lng, lat] coordinates into `out`.
+function collectCoords(geom, out) {
+  if (!geom) return;
+  if (Array.isArray(geom)) {
+    if (geom.length >= 2 && typeof geom[0] === 'number') {
+      out.push(geom);
+    } else {
+      for (const g of geom) collectCoords(g, out);
+    }
+  }
+}
+
+// Fit the map so the whole country is visible (padding for the open popup).
+function fitMapToCountry() {
+  if (!map) return;
+  let coords = [];
+  if (state.geo.districts && state.geo.districts.features) {
+    for (const f of state.geo.districts.features) collectCoords(f.geometry, coords);
+  }
+  if (!coords.length) coords = state.districts.map((d) => [d.lon, d.lat]);
+  if (!coords.length) return;
+  const lats = coords.map((c) => c[1]);
+  const lngs = coords.map((c) => c[0]);
+  map.fitBounds(
+    [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]],
+    { padding: [12, 12], maxZoom: 8, animate: false }
+  );
+}
+
+// Expand/collapse the popup. Fitting happens only when expanding, so a
+// collapse keeps the user's current zoom (per design); the size is always
+// invalidated so the map fills the freed space.
+function setPopupExpanded(expanded, doFit) {
+  state.popupExpanded = expanded;
+  const detail = $('#map-detail');
+  detail.classList.toggle('collapsed', !expanded);
+  const tg = $('#detail-toggle');
+  tg.setAttribute('aria-expanded', String(expanded));
+  tg.setAttribute('aria-label', expanded ? 'Скриване на разбивката' : 'Показване на разбивката');
+  if (map) {
+    map.invalidateSize();
+    // The canvas vector layers do not redraw on invalidateSize alone, so
+    // re-render them (both on expand and collapse) or they disappear.
+    renderMapLayers();
+    if (doFit && expanded) fitMapToCountry();
+  }
+}
+
+// Title-bar controls: the title toggles the sheet; the back arrow returns to
+// the national overview from a record.
+$('#detail-toggle').addEventListener('click', () => {
+  state.popupUserSet = true;
+  setPopupExpanded(!state.popupExpanded, true);
+});
+$('#detail-back').addEventListener('click', () => openOverview());
 
 function openDetail(key) {
   const r = rows().find((x) => rowKey(x) === key);
@@ -648,13 +753,29 @@ window.addEventListener('popstate', () => {
 
 (async () => {
   initTheme();
-  $('#status').textContent = 'Зареждане на данни…';
+  setStatus('Зареждане на данни…');
   try {
     await loadData();
-    $('#status').textContent = '';
+    setStatus('');
     initMap();
+    // Per-breakpoint default: expanded on desktop, collapsed on mobile. The
+    // collapsed bar still carries the national summary to invite a tap.
+    const isMobile = window.matchMedia('(max-width: 700px)').matches;
+    state.popupExpanded = !isMobile;
+    openOverview();
+    setPopupExpanded(!isMobile, true);
   } catch (err) {
-    $('#status').textContent = 'Грешка при зареждане на данните. Стартирай `node scripts/serve.mjs` и отвори през http://localhost:8000 (не през file://).';
+    setStatus('Грешка при зареждане на данните. Стартирай `node scripts/serve.mjs` и отвори през http://localhost:8000 (не през file://).');
     console.error(err);
   }
 })();
+
+// Re-apply the per-breakpoint default when crossing the mobile breakpoint,
+// but only until the user has toggled the popup manually (per design).
+const mobileMq = window.matchMedia('(max-width: 700px)');
+const onBreakpoint = (e) => {
+  if (state.popupUserSet || !state.meta) return;
+  setPopupExpanded(!e.matches, true);
+};
+if (mobileMq.addEventListener) mobileMq.addEventListener('change', onBreakpoint);
+else if (mobileMq.addListener) mobileMq.addListener(onBreakpoint);

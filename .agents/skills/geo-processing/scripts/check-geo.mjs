@@ -10,6 +10,8 @@
  *      ("32. Извън страната" / abroad has no domestic polygon by design)
  *   2. no polygon feature references an unknown district name
  *   3. per-district winner recomputed from sections.json == districts.json lead
+ *      (sections.json holds only mapped sections, so its per-region valid sums
+ *      must be ≤ the district totals, not equal)
  *   4. choropleth winner (argmax of districts.json votes, merged for Sofia)
  *      equals that lead — the acceptance criterion from issue #2
  *   5. all coordinates are finite WGS84 lon/lat and rings are non-degenerate
@@ -82,6 +84,10 @@ if (geoDistricts.features.length !== domesticDistricts - mergedExtras) {
 
 // ---- 3: winner from sections vs pre-aggregated districts -------------------
 
+// sections.json contains only the coord-bearing sections (map markers);
+// no-coord sections are counted in districts.json totals but can't be plotted.
+// So per-region sums from sections.json must be ≤ the district total, and the
+// winner must agree.
 const fromSections = new Map();
 for (const s of sections) {
   const rec = fromSections.get(s.region) ?? { votes: {}, valid: 0 };
@@ -100,8 +106,8 @@ for (const d of districts) {
   if (w !== d.lead?.id) {
     fail(`"${d.name}": sections say winner ${w}, districts.json says ${d.lead?.id}`);
   }
-  if (agg.valid !== d.valid) {
-    fail(`"${d.name}": sections valid ${agg.valid}, districts.json valid ${d.valid}`);
+  if (agg.valid > d.valid) {
+    fail(`"${d.name}": mapped sections valid ${agg.valid} exceeds district total ${d.valid}`);
   }
 }
 
@@ -183,7 +189,7 @@ const B = (n) => n.toLocaleString('en-US');
 console.log('check-geo.mjs — verification');
 console.log(`  districts:   ${geoDistricts.features.length} features cover ${domesticDistricts}/${districts.length - 1} domestic election districts (${mergedExtras} merged Sofia ИР; 32. Извън страната has no polygon)`);
 console.log(`  settlements: ${B(seen.size)}/${B(wanted.size)} polygons (${coveragePct.toFixed(1)}%); ${B(allSettlements.length - wanted.size)} 6-digit EKATTEs use circle markers`);
-console.log(`  sections:    ${B(sections.length)} aggregated, winners cross-checked`);
+console.log(`  sections:    ${B(sections.length)} mapped markers, winners cross-checked (no-coord sections counted in totals but not plotted)`);
 
 if (failures.length) {
   console.error(`\nFAILED (${failures.length}):`);

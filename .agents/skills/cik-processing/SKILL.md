@@ -125,8 +125,21 @@ site is a separate, repo concern — `node scripts/serve.mjs`.)
 
 ### `meta.json`
 `{ election, dataDate, parties:[{id,name}], candidates:[{partyId,partyName,listNo,name}],
-partyColors:{id:"hsl(...)"}, stats:{ sectionsWithCoords, countedSections, uncountedSections,
-totalValid, leader:{id,votes} } }`.
+partyColors:{id:"hsl(...)"}, stats:{ totalSections, sectionsWithCoords, countedSections,
+uncountedSections, totalValid, leader:{id,votes} } }`.
+
+- `totalSections` — every section in the export (12,719; matches CIK's "Брой на СИ").
+- `sectionsWithCoords` — sections usable as map markers (12,364).
+- `countedSections` — sections with nonzero valid votes (12,718; one no-coord mobile
+  section, `092100062` Момчилград, has all-zero votes in the raw export — its protocol
+  shows 19 valid ballots, all «Не подкрепям никого» (form 24, т. 7.2), i.e. 0 for lists).
+- `totalValid` — sum over **all** sections, coord or not; must match CIK's 8.1
+  "действителни гласове за кандидатските листи" within their quantization. Known diff
+  (just 2 votes in 2026): the export's `votes.txt` per-party distribution lags the
+  protocols for two sections — `020400036` (гр.Бургас, proto 127 vs votes 126) and
+  `050900129` (с.Кутово, proto 24 vs votes 23); the live site recomputes from the
+  newer DB. The party attribution of those 2 votes is unknown, so `votes.txt` stays
+  the source of truth and we accept the ≤2-vote lag.
 
 ### `sections.json`
 Array of sections with **finite** coords. Per-party votes stored **nonzero only**:
@@ -150,7 +163,8 @@ exception — its sections span 23/24/25 ИР, so its `region` is the collapsed 
 ## Verification
 
 `process.mjs` prints a summary; also eyeball:
-- `meta.stats.totalValid` is plausible (~1.4M for the 2026 export).
+- `meta.stats.totalSections` = 12,719 and `totalValid` ≈ 1,454,357 (official 8.1 =
+  1,454,359; the export trails the live site slightly).
 - `meta.stats.sectionsWithCoords` ≈ 12.4k; every `sections.json` entry has finite
   `lon`/`lat`.
 - Every party `id` in any `votes` maps to an id in `meta.parties`.
