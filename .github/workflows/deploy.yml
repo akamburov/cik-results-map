@@ -22,12 +22,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # NOTE: raw CIK exports (Exports/) are gitignored, so we cannot regenerate
+      # NOTE: raw CIK exports (exports/) are gitignored, so we cannot regenerate
       # data/*.json here; instead validate the invariants the viewer relies on.
       - name: Validate data invariants
         run: node scripts/validate-data.mjs
       - name: Validate choropleth geometry
         run: node .agents/skills/geo-processing/scripts/check-geo.mjs
+      - name: Unit tests (node:test, zero-dependency)
+        run: node --test test/app-core.test.js
 
   deploy:
     needs: verify-data
@@ -37,8 +39,24 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Rebuild the minified bundle from source on every deploy so the published
+      # app.min.js can never be stale relative to app.js. esbuild is fetched on
+      # demand via npx (no committed dependency) and bundles app.js + app-core.js
+      # + the vendored Leaflet.markercluster into one file (leaflet stays external).
+      - name: Minify JS + CSS (fresh build)
+        run: node scripts/minify.mjs app.js style.css
+      - name: Prepare site folder (only what index.html + data need)
+        run: |
+          mkdir -p site
+          cp index.html icon.png app.min.js style.min.css site/
+          cp -r data site/
+          cp vendor/leaflet.markercluster/src/MarkerCluster.css site/
+          cp vendor/leaflet.markercluster/src/MarkerCluster.Default.css site/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4

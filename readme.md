@@ -36,14 +36,14 @@ so the site is fully static and requires no runtime API.
   - [OpenSpec](https://openspec.dev) for software design specifications (SDD) and the 
 - **Front end:** vanilla JavaScript (ESM) + [Leaflet] 2.0 (`2.0.0-beta.1` via an
   importmap from jsDelivr) + [Leaflet.markercluster] vendored at
-  `vendor/leaflet.markercluster/`. One `index.html` + `app.js` + `style.css`.
-  No React, no bundler, no `npm install`.
+  `vendor/leaflet.markercluster/`. One `index.html` + `app.js` + `style.css`
+  (served minified as `app.min.js`); no React, no bundler, no `npm install`.
 - **Preprocessing:** two tiny Node scripts, dependency-free, each bundled in its own
   skill:
   - `.agents/skills/cik-processing/scripts/process.mjs` — CIK CSVs → `data/*.json`
     (uses only `fs` + `readline`).
   - `.agents/skills/geo-processing/scripts/build-geo.mjs` — boundary GeoJSON →
-    `data/*-geo.json` (choropleth geometry).
+    `data/*.geojson` (choropleth geometry).
 - **Hosting:** GitHub Pages (just push the files).
 
 ## Project layout
@@ -58,25 +58,31 @@ so the site is fully static and requires no runtime API.
 │   └── geo-processing/
 │       ├── SKILL.md          # choropleth geometry skill
 │       └── scripts/
-│           ├── build-geo.mjs     # boundary GeoJSON → data/*-geo.json
+│           ├── build-geo.mjs     # boundary GeoJSON → data/*.geojson
 │           └── check-geo.mjs     # verifies geometry against election data
-├── index.html                # static entry point (Leaflet 2.0 importmap + ESM app.js)
+├── index.html                # static entry point (Leaflet 2.0 importmap, loads app.min.js bundle)
+├── app-core.js               # pure, dependency-free helpers (map + table logic) — shared by app.js & tests
 ├── app.js                    # vanilla-JS ESM app (map + table + filters)
+├── app.min.js                # GENERATED (committed): bundled + minified (app.js + app-core.js + markercluster)
 ├── style.css                 # light/dark palette via CSS variables
+├── style.min.css             # GENERATED (committed): minified stylesheet loaded by index.html
+├── test/
+│   └── app-core.test.js      # node:test unit tests for app-core.js (zero-dependency)
 ├── vendor/
-│   └── leaflet.markercluster/  # vendored Leaflet.markercluster (ESM source)
+│   └── leaflet.markercluster/  # vendored Leaflet.markercluster (ESM source, bundled at minify time)
 ├── scripts/
-│   └── serve.mjs             # tiny local static server for preview (Node built-ins)
+│   ├── serve.mjs             # tiny local static server for preview (Node built-ins)
+│   └── minify.mjs            # bundle + minify app.js with esbuild (via npx) → app.min.js
 ├── data/                     # GENERATED (committed)
 │   ├── meta.json
 │   ├── sections.json
 │   ├── districts.json
 │   ├── settlements.json
-│   ├── districts-geo.json    #   one polygon feature per electoral district
-│   └── settlements-geo.json  #   settlement land polygons keyed by EKATTE
+│   ├── districts.geojson     #   one polygon feature per electoral district
+│   └── settlements.geojson   #   settlement land polygons keyed by EKATTE
 ├── icon.png                  # favicon
 ├── LICENSE
-└── Exports/                  # raw CIK export + boundary GeoJSON (gitignored)
+└── exports/                  # raw CIK export + boundary GeoJSON (gitignored)
 ```
 
 ## Getting started
@@ -84,6 +90,9 @@ so the site is fully static and requires no runtime API.
 ```bash
 # 1) (optional, when refreshing election data) regenerate the aggregates
 node .agents/skills/cik-processing/scripts/process.mjs
+
+# 1b) run the unit tests (Node built-in runner — no install)
+node --test test/app-core.test.js
 
 # 2) (optional, when refreshing boundaries) rebuild the choropleth geometry,
 #    then verify it against the election data
@@ -97,10 +106,10 @@ node scripts/serve.mjs           # → http://localhost:8000
 Open the page and it fetches the JSON from `data/` and renders the map + table.
 No compile, no dependencies, no dev-server tooling.
 
-`build-geo.mjs` reads its inputs from `Exports/geo/` (gitignored, override with `--in`):
+`build-geo.mjs` reads its inputs from `exports/geo/` (gitignored, override with `--in`):
 `provinces.geojson` (28 NUTS3 provinces), `municipalities.geojson` (265 NUTS4
 municipalities) and `settlements.geojson` (settlement land zones keyed by 5-digit
-EKATTE). It writes `data/districts-geo.json` + `data/settlements-geo.json` (override the
+EKATTE). It writes `data/districts.geojson` + `data/settlements.geojson` (override the
 directory with `--out`) and reads `data/settlements.json` to know which EKATTEs are
 needed. See the `geo-processing` skill for the exact mapping of
 provinces/municipalities to the 32 electoral districts, including the Пловдив
@@ -163,10 +172,53 @@ before shipping:
 3. per-district winners recomputed from `sections.json` match `districts.json`;
 4. the choropleth colour (argmax of votes, merged for Sofia) matches that winner;
 5. coordinates are finite WGS84 and no ring is degenerate;
-6. `settlements-geo.json` only references known EKATTEs and covers ≥ 95% of them.
+6. `settlements.geojson` only references known EKATTEs and covers ≥ 95% of them.
 
 For choropleth geometry, both scripts also drop sub-hectare sliver polygons that
 come from topology cleanup in the upstream boundaries.
+
+## Testing
+
+No framework, no `npm install`: the unit tests use Node's built-in runner.
+They cover the **pure** logic in `app-core.js` (formatting, escaping, EKATTE
+normalisation, vote aggregation, candidate ordering, table filtering/sorting)
+— everything that is deterministic and worth unit-testing. The Leaflet / DOM
+rendering is deliberately excluded; it depends on the browser. Run with:
+
+```bash
+node --test test/app-core.test.js
+```
+
+The `deploy.yml` CI job runs this suite (plus the data/geometry validation
+scripts) on every push to `main`.
+
+## Minifying the JS + CSS
+
+`index.html` loads a single bundled + minified `app.min.js` (one file: it
+contains `app.js`, `app-core.js`, and the vendored Leaflet.markercluster,
+all inlined and minified; `leaflet` stays external, resolved by the
+importmap) and a minified `style.min.css`. Both are **committed generated
+artifacts** (like `data/*.json`): you edit the source, then regenerate:
+
+```bash
+node scripts/minify.mjs app.js style.css
+```
+
+This also runs automatically in the `deploy.yml` job before the Pages upload,
+so the published site is always current relative to the source. (Locally,
+`node scripts/serve.mjs` warns if a generated file is older than its source.)
+
+It uses **esbuild** (a fast bundler + minifier) fetched on demand via `npx`,
+so the repository itself stays dependency-free — no `package.json`, no
+committed `node_modules`. `.js` entries are bundled (the previously unminified
+vendored markercluster gets minified too, cutting the payload roughly in
+half, ~113 KB of source → ~49 KB); `.css` entries are minified in place
+(~8.9 KB → ~6.8 KB). The two tiny vendored markercluster CSS files and the
+Leaflet CDN stylesheet stay as separate `<link>`s — not worth bundling.
+The first run downloads esbuild into the npx cache (needs network); later
+runs reuse it. For repeatable/pinned builds, install it yourself
+(`npm i -g esbuild`) or add it as a devDependency — the repo intentionally
+does neither.
 
 ## Data integrity
 
@@ -187,7 +239,7 @@ restriction, including commercially. See the original CIK data page for reuse te
 Boundary geometry: derived from [`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-geocoding),
 which compiles NSI/AGCC open data but carries **no explicit license**. That repository
 carries **no explicit license file** — confirm/seek permission (or use open-data.bg boundaries)
-before redistributing the `data/*-geo.json` files beyond this project.
+before redistributing the `data/*.geojson` files beyond this project.
 
 [Leaflet]: https://leafletjs.com
 [Leaflet.markercluster]: https://github.com/Leaflet/Leaflet.markercluster

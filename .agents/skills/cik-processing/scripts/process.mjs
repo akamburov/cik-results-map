@@ -10,9 +10,9 @@
  *
  *   node .agents/skills/cik-processing/scripts/process.mjs
  *   node .agents/skills/cik-processing/scripts/process.mjs \
- *        --in ./Exports/processed --out ./data
+ *        --in ./exports/processed --out ./data
  *
- * Flags:  --in <dir>   folder to scan for the CSVs  (default: ./Exports/processed)
+ * Flags:  --in <dir>   folder to scan for the CSVs  (default: ./exports/processed)
  *         --out <dir>  folder to write the JSON to   (default: ./data)
  *
  * No dependencies. Uses Node built-ins only (fs + readline streaming).
@@ -37,7 +37,7 @@ const flag = (name) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const DATA_DIR = resolve(process.cwd(), flag('--in') ?? 'Exports/processed');
+const DATA_DIR = resolve(process.cwd(), flag('--in') ?? 'exports/processed');
 const OUT_DIR = resolve(process.cwd(), flag('--out') ?? 'data');
 const ELECTION = 'Президент и вицепрезидент 10.2026 г., тур 1';
 
