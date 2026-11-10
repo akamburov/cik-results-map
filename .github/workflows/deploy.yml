@@ -18,8 +18,8 @@ jobs:
   verify-data:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # NOTE: raw CIK exports (exports/) are gitignored, so we cannot regenerate
@@ -38,8 +38,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Rebuild the minified bundle from source on every deploy so the published
@@ -55,8 +55,8 @@ jobs:
           cp -r data site/
           cp vendor/leaflet.markercluster/src/MarkerCluster.css site/
           cp vendor/leaflet.markercluster/src/MarkerCluster.Default.css site/
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
