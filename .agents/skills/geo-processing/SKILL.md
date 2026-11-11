@@ -2,7 +2,7 @@
 name: geo-processing
 description: >-
   Build and verify the choropleth boundary geometry for the Bulgarian election map:
-  turn raw BG boundary GeoJSON into the `data/*-geo.json` files the viewer draws, and
+  turn raw BG boundary GeoJSON into the `data/*.geojson` files the viewer draws, and
   check them against the election aggregates. Use when the user asks to (re)build the
   map polygons, add/refactor the district or settlement choropleth, fix a district with
   a missing/wrong polygon, refresh boundaries, or debug why a polygon is uncoloured.
@@ -19,7 +19,7 @@ Everything here is **dependency-free Node** (built-ins only): no turf, no GDAL, 
 
 ## When to use this skill
 
-- (Re)building `data/districts-geo.json` / `data/settlements-geo.json`.
+- (Re)building `data/districts.geojson` / `data/settlements.geojson`.
 - Refreshing the boundary source or switching providers (licensing, resolution).
 - Adding a new polygon layer (e.g. municipalities) or changing what a feature carries.
 - Debugging an uncoloured district, a district drawn twice, or stray dots/slivers.
@@ -30,7 +30,7 @@ Everything here is **dependency-free Node** (built-ins only): no turf, no GDAL, 
 ### Boundaries (raw, gitignored)
 
 Fetch from [`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-geocoding)
-(compiled from NSI / AGCC open data) and put the GeoJSON in `Exports/geo/`:
+(compiled from NSI / AGCC open data) and put the GeoJSON in `exports/geo/`:
 
 | File | Content | Key properties |
 |---|---|---|
@@ -39,10 +39,10 @@ Fetch from [`yurukov/Bulgaria-geocoding`](https://github.com/yurukov/Bulgaria-ge
 | `settlements.geojson` | settlement land zones | `ekatte` (5-digit string) |
 
 ⚠️ **Licensing caveat:** that repository carries **no explicit license file**. Treat the
-derived `data/*-geo.json` as *unverified for redistribution* until confirmed, or switch to
+derived `data/*.geojson` as *unverified for redistribution* until confirmed, or switch to
 open-data.bg / НСИ request boundaries and update this document.
 
-`Exports/geo/rpu_sofia.geojson` and `municipalities.csv` may also be present; they are
+`exports/geo/rpu_sofia.geojson` and `municipalities.csv` may also be present; they are
 reference material for the Sofia/Пловдив splits, not script inputs.
 
 ### Election aggregates (generated, committed)
@@ -85,17 +85,17 @@ gr. Костенец
    claim the shared polygon — see `contains` below), and every member name is listed in
    `properties.members` when there is more than one. Territories with no polled section
    at all are kept and marked `uncounted: true` so the choropleth has no holes.
-4. Writes `data/districts-geo.json` and `data/settlements-geo.json`
+4. Writes `data/districts.geojson` and `data/settlements.geojson`
    (`JSON.stringify`, no pretty-printing, deterministic ordering).
 
 ### Run
 
-From the repo root (paths default to `./Exports/geo` and `./data`):
+From the repo root (paths default to `./exports/geo` and `./data`):
 
 ```bash
 node .agents/skills/geo-processing/scripts/build-geo.mjs
 node .agents/skills/geo-processing/scripts/build-geo.mjs \
-  --in ./Exports/geo --out ./data
+  --in ./exports/geo --out ./data
 ```
 
 `--out` is also the directory `settlements.json` is read from. Both paths default
@@ -114,7 +114,7 @@ Previewing the site is a separate, repo concern — `node scripts/serve.mjs`.
 
 Both files are plain WGS84 `FeatureCollection`s (lon/lat order, Leaflet-ready).
 
-### `data/districts-geo.json`
+### `data/districts.geojson`
 
 ```json
 { "type": "FeatureCollection", "features": [
@@ -130,7 +130,7 @@ Both files are plain WGS84 `FeatureCollection`s (lon/lat order, Leaflet-ready).
 - Current output: **29 features** covering 31/31 domestic districts (26 provinces +
   2 Пловдив + 1 merged Sofia).
 
-### `data/settlements-geo.json`
+### `data/settlements.geojson`
 
 ```json
 { "type": "FeatureCollection", "features": [
@@ -158,7 +158,7 @@ Both files are plain WGS84 `FeatureCollection`s (lon/lat order, Leaflet-ready).
 3. The choropleth colour (argmax of merged votes, Sofia merged) equals that lead — the
    issue #2 acceptance criterion.
 4. Coordinates are finite, inside a Bulgaria bbox, and no ring is degenerate.
-5. `settlements-geo.json` references only known 5-digit EKATTEs (uncounted hatch
+5. `settlements.geojson` references only known 5-digit EKATTEs (uncounted hatch
    territories exempt), no duplicate polled polygons, and covers ≥ 95% of five-digit
    EKATTEs.
 
@@ -167,12 +167,12 @@ is not reproducible, something is iterating a Map/Set in an unstable way.
 
 ## Rules
 
-- **Never commit** `Exports/` (gitignored). Commit only the scripts + regenerated
-  `data/*-geo.json`.
+- **Never commit** `exports/` (gitignored). Commit only the scripts + regenerated
+  `data/*.geojson`.
 - Changing `build-geo.mjs` means re-running it **and** `check-geo.mjs`, then committing
   the regenerated JSON in the same change; keep this document and the schema in sync.
-- The viewer (`app.js`) fetches `./data/districts-geo.json` and
-  `./data/settlements-geo.json` and tolerates their absence (`.catch(() => null)` →
+- The viewer (`app.js`) fetches `./data/districts.geojson` and
+  `./data/settlements.geojson` and tolerates their absence (`.catch(() => null)` →
   markers only). If you rename an output, update `app.js`, `readme.md` and `agents.md`
   together.
 - Codes/properties in English, district and settlement names in **Bulgarian** (verbatim

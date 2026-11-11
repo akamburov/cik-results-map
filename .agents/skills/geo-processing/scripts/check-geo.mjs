@@ -3,7 +3,7 @@
  *
  * Run:   node .agents/skills/geo-processing/scripts/check-geo.mjs [--data ./data]
  *
- * Checks the generated data/*-geo.json against the election data the viewer
+ * Checks the generated data/*.geojson against the election data the viewer
  * joins them with (data/districts.json, data/settlements.json, data/sections.json):
  *
  *   1. every domestic election district is covered by exactly one polygon feature
@@ -15,7 +15,7 @@
  *   4. choropleth winner (argmax of districts.json votes, merged for Sofia)
  *      equals that lead — the acceptance criterion from issue #2
  *   5. all coordinates are finite WGS84 lon/lat and rings are non-degenerate
- *   6. settlements-geo.json covers the expected share of settlements and only
+ *   6. settlements.geojson covers the expected share of settlements and only
  *      references EKATTEs present in data/settlements.json (6-digit EKATTEs from
  *      the post-2015 register have no polygons anywhere; the viewer falls back
  *      to circle markers for them)
@@ -35,8 +35,8 @@ const read = (f) => JSON.parse(readFileSync(join(DATA, f), 'utf8'));
 const districts = read('districts.json');
 const settlements = read('settlements.json');
 const sections = read('sections.json');
-const geoDistricts = read('districts-geo.json');
-const geoSettlements = read('settlements-geo.json');
+const geoDistricts = read('districts.geojson');
+const geoSettlements = read('settlements.geojson');
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -172,7 +172,7 @@ for (const f of geoSettlements.features) {
     continue;
   }
   if (!wanted.has(ek)) {
-    fail(`settlements-geo references unknown EKATTE ${ek}`);
+    fail(`settlements.geojson references unknown EKATTE ${ek}`);
     continue;
   }
   if (seen.has(ek)) fail(`duplicate settlement polygon for EKATTE ${ek}`);

@@ -25,7 +25,7 @@ framework or build step.
 
 ## The data source
 
-The raw export is a zip (e.g. `Exports/export-pvr202610-tur1.zip`). It contains two
+The raw export is a zip (e.g. `exports/export-pvr202610-tur1.zip`). It contains two
 folders:
 
 - **`Актуализирана база данни/`** — the CSV files we use. Extract **this** folder.
@@ -35,10 +35,10 @@ The CIK publishes a `readme_*.txt` inside that folder describing every file; tha
 is the authoritative field spec. Files are **UTF-8, `;`-delimited**. Despite CIK docs
 mentioning Windows-1251, the actual exports are UTF-8 — **do not transcode**.
 
-Extraction target: `Exports/processed/<Актуализирана база данни>/` (gitignored).
+Extraction target: `exports/processed/<Актуализирана база данни>/` (gitignored).
 
 ```bash
-unzip -o Exports/export-pvr202610-tur1.zip "Актуализирана база данни/*" -d Exports/processed
+unzip -o exports/export-pvr202610-tur1.zip "Актуализирана база данни/*" -d exports/processed
 ```
 
 ## Files in the export
@@ -53,7 +53,7 @@ unzip -o Exports/export-pvr202610-tur1.zip "Актуализирана база 
 
 ## CIK CSV field maps
 
-`process.mjs` globs `Exports/processed/` recursively to find these (date-suffixed names
+`process.mjs` globs `exports/processed/` recursively to find these (date-suffixed names
 like `votes_25.10.2026.txt`) — it does **not** hardcode the date.
 
 ### `cik_parties.txt`
@@ -98,7 +98,7 @@ Field 1 = form number, field 2 = section code.
 
 `process.mjs` (bundled in this skill at `scripts/process.mjs`) is the only
 preprocessing step. It:
-1. Scans `Exports/processed/` recursively for the CSVs (ignoring any `suemg/` folder).
+1. Scans `exports/processed/` recursively for the CSVs (ignoring any `suemg/` folder).
 2. Streams them with Node's `readline` (built-in, no deps).
 3. Joins `votes.txt` per-section data onto `sections.txt` rows (by section code).
 4. Aggregates into electoral regions + settlements; assigns a deterministic color per
@@ -108,12 +108,12 @@ preprocessing step. It:
 
 ### Run
 
-From the repo root (paths default to `./Exports/processed` and `./data`):
+From the repo root (paths default to `./exports/processed` and `./data`):
 
 ```bash
 node .agents/skills/cik-processing/scripts/process.mjs
 node .agents/skills/cik-processing/scripts/process.mjs \
-  --in ./Exports/processed --out ./data
+  --in ./exports/processed --out ./data
 ```
 
 Because the script reads paths from `--in`/`--out` (defaulting relative to the current
@@ -173,7 +173,7 @@ exception — its sections span 23/24/25 ИР, so its `region` is the collapsed 
 
 ## Rules
 
-- **Never commit** `Exports/` (it is gitignored). Commit only source + regenerated
+- **Never commit** `exports/` (it is gitignored). Commit only source + regenerated
   `data/*.json`.
 - When you change `process.mjs`, re-run it and commit the regenerated JSON in the same
   change; keep the output schema above in sync with the code.

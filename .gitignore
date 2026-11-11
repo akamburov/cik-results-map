@@ -6,8 +6,8 @@ build/
 *.tsbuildinfo
 
 # Raw election data + boundary GeoJSON — regenerable; DO NOT commit (~18MB export)
-Exports/
-!Exports/.gitkeep
+exports/
+!exports/.gitkeep
 
 # Editor / OS
 .vscode/

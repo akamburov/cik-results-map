@@ -1,7 +1,7 @@
 #!/usr/bin/env node --input-type=module
 /* build-geo.mjs — builds the choropleth geometry files for the viewer.
  *
- * Input (raw, gitignored): ./Exports/geo/   (override with --in)
+ * Input (raw, gitignored): ./exports/geo/   (override with --in)
  *   provinces.geojson      28 BG provinces (NUTS3), from yurukov/Bulgaria-geocoding
  *   municipalities.geojson 265 BG municipalities (NUTS4)
  *   settlements.geojson    settlement land zones keyed by 5-char EKATTE
@@ -12,11 +12,11 @@
  * which EKATTEs are actually needed.
  *
  * Output (generated, committed): ./data/   (override with --out)
- *   districts-geo.json  FeatureCollection; one feature per election district with
+ *   districts.geojson  FeatureCollection; one feature per election district with
  *                       actual polygons. 26 provinces map 1:1; ПЛОВДИВ град/област
  *                       assembled from municipalities; СОФИЯ 23/24/25 ИР share one
  *                       merged polygon (property districts[]).
- *   settlements-geo.json FeatureCollection; settlement land polygons keyed by
+ *   settlements.geojson FeatureCollection; settlement land polygons keyed by
  *                       EKATTE (only the EKATTEs present in data/settlements.json).
  *
  * Deterministic: same inputs → byte-identical output.
@@ -31,7 +31,7 @@ function arg(name, fallback) {
   const i = process.argv.indexOf(name);
   return i > -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
-const IN = resolve(arg('--in', './Exports/geo'));
+const IN = resolve(arg('--in', './exports/geo'));
 const OUT = resolve(arg('--out', './data'));
 
 const read = (dir, f) => JSON.parse(readFileSync(join(dir, f), 'utf8'));
@@ -159,7 +159,7 @@ if (sofGrad) {
 // cover-order: put Sofia city & Plovdiv city on top (small polygons over big ones)
 mkdirSync(OUT, { recursive: true });
 writeFileSync(
-  join(OUT, 'districts-geo.json'),
+  join(OUT, 'districts.geojson'),
   JSON.stringify({ type: 'FeatureCollection', features })
 );
 
@@ -220,7 +220,7 @@ for (const f of setGeo.features) {
 }
 
 writeFileSync(
-  join(OUT, 'settlements-geo.json'),
+  join(OUT, 'settlements.geojson'),
   JSON.stringify({ type: 'FeatureCollection', features: geoFeatures })
 );
 
@@ -230,5 +230,5 @@ writeFileSync(
 
 const B = (n) => n.toLocaleString('en-US');
 console.log('build-geo.mjs — summary');
-console.log(`  districts-geo.json    ${B(features.length)} features (26 provinces + 2 Пловдив + 1 София merged)`);
-console.log(`  settlements-geo.json  ${B(geoFeatures.length)} polygons`);
+console.log(`  districts.geojson    ${B(features.length)} features (26 provinces + 2 Пловдив + 1 София merged)`);
+console.log(`  settlements.geojson  ${B(geoFeatures.length)} polygons`);

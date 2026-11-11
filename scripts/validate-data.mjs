@@ -1,5 +1,5 @@
 // CI-side validation of committed data/*.json invariants.
-// The raw CIK exports (Exports/) are gitignored, so regeneration is not possible
+// The raw CIK exports (exports/) are gitignored, so regeneration is not possible
 // on CI; instead we check the invariants the viewer relies on.
 import { readFileSync } from 'node:fs';
 

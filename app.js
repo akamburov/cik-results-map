@@ -4,10 +4,23 @@
  */
 import { LeafletMap, TileLayer, LayerGroup, CircleMarker, GeoJSON, Canvas, DomEvent } from 'leaflet';
 import { MarkerClusterGroup } from './vendor/leaflet.markercluster/src/index.js';
+import {
+  esc,
+  fmt,
+  normEkatte,
+  regionLabel,
+  sumVotes,
+  countOverallOf,
+  candidateDisplayName,
+  partyColorOf,
+  defaultCandidates,
+  orderedCandidates,
+  filterRows,
+  columnValue,
+  sortRows,
+} from './app-core.js';
 
 const $ = (sel) => document.querySelector(sel);
-const esc = (v) =>
-  String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 const state = {
   meta: null,
@@ -88,8 +101,8 @@ async function loadData() {
     fetch('./data/districts.json').then((r) => r.json()),
     fetch('./data/settlements.json').then((r) => r.json()),
     fetch('./data/sections.json').then((r) => r.json()),
-    fetch('./data/districts-geo.json').then((r) => r.json()).catch(() => null),
-    fetch('./data/settlements-geo.json').then((r) => r.json()).catch(() => null),
+    fetch('./data/districts.geojson').then((r) => r.json()).catch(() => null),
+    fetch('./data/settlements.geojson').then((r) => r.json()).catch(() => null),
   ]);
   state.meta = meta;
   state.districts = districts;
@@ -101,14 +114,8 @@ async function loadData() {
     settlements.map((s) => [normEkatte(s.ekatte), s])
   );
 
-  // default selected candidates = top N by overall valid votes
-  const top = [...meta.candidates]
-    .map((c) => [c.partyId, countOverall(c.partyId)])
-    .filter(([, votes]) => votes > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([id]) => id);
-  state.defaultCandidates = new Set(top);
+  // default selected candidates = top N by overall valid votes (see app-core)
+  state.defaultCandidates = new Set(defaultCandidates(meta, districts));
 
   loadStateFromUrl();
   syncControlsToState();
@@ -116,11 +123,8 @@ async function loadData() {
   renderTable();
 }
 
-function countOverall(partyId) {
-  let s = 0;
-  for (const d of state.districts) s += (d.votes[partyId] || 0);
-  return s;
-}
+// Thin app-state wrappers around the pure helpers in app-core.js.
+const countOverall = (partyId) => countOverallOf(state.districts, partyId);
 
 // ---- url state sync --------------------------------------------------------
 
@@ -250,30 +254,12 @@ function updateUrl() {
 
 // ---- helpers ---------------------------------------------------------------
 
-const fmt = (n) => (n == null ? '—' : Number(n).toLocaleString('bg-BG').replace(/\u00A0/g, ' '));
-const normEkatte = (v) => String(v).replace(/\D/g, '').padStart(5, '0');
-const candidateName = (id) => {
-  const c = state.meta.candidates.find((x) => x.partyId === id);
-  const name = c && c.name ? c.name : (() => {
-    const p = state.meta.parties.find((x) => x.id === id);
-    return p ? p.name.split('-')[0] : id;
-  })();
-  return `${id}. ${name}`;
-};
-const partyColor = (id) => state.meta.partyColors[id] || '#888';
-const getOrderedCandidates = () => {
-  if (!state.selectedCandidates) return [];
-  return [...state.meta.candidates]
-    .map((c) => [c.partyId, countOverall(c.partyId)])
-    .filter(([id, votes]) => votes > 0 && state.selectedCandidates.has(id))
-    .sort((a, b) => b[1] - a[1])
-    .map(([id]) => id);
-};
+const candidateName = (id) => candidateDisplayName(state.meta, id);
+const partyColor = (id) => partyColorOf(state.meta, id);
+const getOrderedCandidates = () =>
+  orderedCandidates(state.meta, state.districts, state.selectedCandidates || new Set());
 const rows = () => (state.unit === 'districts' ? state.districts : state.settlements);
-const rowName = (r) => (state.unit === 'districts' ? r.name : r.name);
-// Region label for display only (strips the "01. " prefix); never part of
-// the search query matching, so typing a region does not filter settlements.
-const regionLabel = (r) => (r.region ? String(r.region).replace(/^\s*\d+\.\s*/, '') : '');
+const rowName = (r) => r.name;
 const rowKey = (r) => (state.unit === 'districts' ? `d:${r.name}` : `s:${r.ekatte}`);
 
 // ---- tabs ------------------------------------------------------------------
@@ -310,37 +296,29 @@ $('#search').addEventListener('input', (e) => {
 function renderChips() {
   const wrap = $('#party-chips');
   wrap.innerHTML = '';
-  const ordered = [...state.meta.candidates]
-    .map((c) => [c, countOverall(c.partyId)])
+  const ranked = [...state.meta.candidates]
+    .map((cand) => [cand, countOverall(cand.partyId)])
     .filter(([, votes]) => votes > 0)
     .sort((a, b) => b[1] - a[1]);
-  for (const [c] of ordered) {
-    const el = document.createElement('button');
-    el.className = 'chip' + (state.selectedCandidates.has(c.partyId) ? '' : ' off');
-    el.innerHTML = `<span class="dot" style="background:${partyColor(c.partyId)}"></span>${candidateName(c.partyId)}`;
-    el.addEventListener('click', () => {
-      if (state.selectedCandidates.has(c.partyId)) state.selectedCandidates.delete(c.partyId);
-      else state.selectedCandidates.add(c.partyId);
+  for (const [cand] of ranked) {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (state.selectedCandidates.has(cand.partyId) ? '' : ' off');
+    chip.innerHTML = `<span class="dot" style="background:${partyColor(cand.partyId)}"></span>${candidateName(cand.partyId)}`;
+    chip.addEventListener('click', () => {
+      if (state.selectedCandidates.has(cand.partyId)) state.selectedCandidates.delete(cand.partyId);
+      else state.selectedCandidates.add(cand.partyId);
       updateUrl();
       renderChips();
       renderTable();
     });
-    wrap.appendChild(el);
+    wrap.appendChild(chip);
   }
 }
 
 // ---- table -----------------------------------------------------------------
 
 function renderTable() {
-  const q = (state.query || '').trim().toLowerCase();
-  const data = rows().filter((r) => {
-    if (!q) return true;
-    const name = (rowName(r) || '').toLowerCase();
-    const settle = (r.settlement || r.name || '').toLowerCase();
-    const lead = r.lead ? candidateName(r.lead.id).toLowerCase() : '';
-    // NOTE: r.region is intentionally excluded from the search fields.
-    return name.includes(q) || settle.includes(q) || lead.includes(q);
-  });
+  const visibleRows = sortRows(filterRows(rows(), state.query, state.meta), state.sort, state.meta);
 
   const candidateIds = getOrderedCandidates();
   const thead = $('#thead');
@@ -356,16 +334,16 @@ function renderTable() {
 
   // cells of these columns are capped in CSS (.cell-text) so very long names
   // ("Обединено кралство …, Лондон") wrap instead of widening the table
-  const cellClass = (c) => [c.align === 'left' ? 'col-align-left' : '', c.cls || ''].filter(Boolean).join(' ');
+  const cellClass = (col) => [col.align === 'left' ? 'col-align-left' : '', col.cls || ''].filter(Boolean).join(' ');
 
   thead.innerHTML = cols
-    .map((c) => {
-      const active = state.sort.col === c.key;
+    .map((col) => {
+      const active = state.sort.col === col.key;
       const arrow = active ? (state.sort.dir < 0 ? ' ▾' : ' ▴') : '';
-      const cls = cellClass(c);
+      const cls = cellClass(col);
       const alignClass = cls ? ` class="${cls}"` : '';
-      const titleAttr = c.title ? ` title="${c.title.replace(/"/g, '&quot;')}"` : '';
-      return `<th data-col="${c.key}"${alignClass}${titleAttr}>${c.label}${arrow}</th>`;
+      const titleAttr = col.title ? ` title="${col.title.replace(/"/g, '&quot;')}"` : '';
+      return `<th data-col="${col.key}"${alignClass}${titleAttr}>${col.label}${arrow}</th>`;
     })
     .join('');
 
@@ -379,46 +357,28 @@ function renderTable() {
     })
   );
 
-  const val = (r, col) => {
-    if (col === 'name') return rowName(r);
-    if (col === 'lead') return r.lead ? candidateName(r.lead.id) : '—';
-    if (col === 'sections') return r.sections;
-    if (col === 'valid') return r.valid;
-    return (r.votes[col] || 0);
-  };
+  const getCellValue = (row, colKey) => columnValue(state.meta, row, colKey);
 
-  data.sort((a, b) => {
-    const av = val(a, state.sort.col);
-    const bv = val(b, state.sort.col);
-    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * state.sort.dir;
-    const cmp = String(av).localeCompare(String(bv), 'bg');
-    // same-named settlements: keep the rows deterministic by region
-    if (cmp === 0 && state.sort.col === 'name') {
-      return regionLabel(a).localeCompare(regionLabel(b), 'bg');
-    }
-    return cmp * state.sort.dir;
-  });
-
-  tbody.innerHTML = data
-    .map((r) => {
-      const cells = cols.map((c) => {
-        const cls = cellClass(c);
+  tbody.innerHTML = visibleRows
+    .map((row) => {
+      const cells = cols.map((col) => {
+        const cls = cellClass(col);
         const clsAttr = cls ? ` class="${cls}"` : '';
         // recolor the "Победител" cell with the winning party's color
-        const leadStyle = c.key === 'lead' && r.lead ? ` style="color:${partyColor(r.lead.id)};font-weight:600"` : '';
-        if (c.key === 'name') {
+        const leadStyle = col.key === 'lead' && row.lead ? ` style="color:${partyColor(row.lead.id)};font-weight:600"` : '';
+        if (col.key === 'name') {
           // muted region in parentheses disambiguates same-named settlements
-          const reg = state.unit === 'settlements' ? regionLabel(r) : '';
-          const suffix = reg ? ` <span class="row-region">(${esc(reg)})</span>` : '';
-          const full = esc(reg ? `${rowName(r)} (${reg})` : rowName(r));
-          return `<td${clsAttr}><span class="cell-text" title="${full}">${esc(rowName(r))}${suffix}</span></td>`;
+          const region = state.unit === 'settlements' ? regionLabel(row) : '';
+          const regionSuffix = region ? ` <span class="row-region">(${esc(region)})</span>` : '';
+          const full = esc(region ? `${row.name} (${region})` : row.name);
+          return `<td${clsAttr}><span class="cell-text" title="${full}">${esc(row.name)}${regionSuffix}</span></td>`;
         }
-        const v = val(r, c.key);
-        const text = typeof v === 'number' ? fmt(v) : v;
-        const body = c.cls ? `<span class="cell-text" title="${esc(v)}">${text}</span>` : text;
+        const cellValue = getCellValue(row, col.key);
+        const text = typeof cellValue === 'number' ? fmt(cellValue) : cellValue;
+        const body = col.cls ? `<span class="cell-text" title="${esc(cellValue)}">${text}</span>` : text;
         return `<td${clsAttr}${leadStyle}>${body}</td>`;
       });
-      return `<tr data-key="${esc(rowKey(r))}">${cells.join('')}</tr>`;
+      return `<tr data-key="${esc(rowKey(row))}">${cells.join('')}</tr>`;
     })
     .join('') || '<tr><td colspan="9" class="muted">Няма резултати.</td></tr>';
 
@@ -482,15 +442,7 @@ function initMap() {
   map.on('click', () => { if (!mapClickSuppressed) openOverview(); });
 }
 
-const sumVotes = (recs) => {
-  const votes = {};
-  let valid = 0;
-  for (const r of recs) {
-    valid += r.valid;
-    for (const [id, v] of Object.entries(r.votes)) votes[id] = (votes[id] || 0) + v;
-  }
-  return { votes, valid };
-};
+
 
 // Choropleth: color polygons by the winner(s) of the joined rows.
 function renderChoropleth(layer) {
@@ -525,19 +477,19 @@ let stripePattern = null;
 function getStripePattern() {
   if (stripePattern) return stripePattern;
   const dark = document.documentElement.dataset.theme === 'dark';
-  const c = document.createElement('canvas');
-  c.width = 12;
-  c.height = 12;
-  const x = c.getContext('2d');
-  x.fillStyle = dark ? 'rgba(20,23,28,0.65)' : 'rgba(233,236,240,0.55)';
-  x.fillRect(0, 0, 12, 12);
-  x.strokeStyle = dark ? '#6b7686' : '#8d949c';
-  x.lineWidth = 1.4;
-  x.beginPath();
-  x.moveTo(0, 12);
-  x.lineTo(12, 0);
-  x.stroke();
-  stripePattern = x.createPattern(c, 'repeat');
+  const canvas = document.createElement('canvas');
+  canvas.width = 12;
+  canvas.height = 12;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = dark ? 'rgba(20,23,28,0.65)' : 'rgba(233,236,240,0.55)';
+  ctx.fillRect(0, 0, 12, 12);
+  ctx.strokeStyle = dark ? '#6b7686' : '#8d949c';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 12);
+  ctx.lineTo(12, 0);
+  ctx.stroke();
+  stripePattern = ctx.createPattern(canvas, 'repeat');
   return stripePattern;
 }
 
@@ -551,13 +503,13 @@ function settlementChoropleth(layer) {
         .addTo(layer);
       continue;
     }
-    const r = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
-    if (!r || !r.lead || !r.valid) continue;
+    const record = state.settlementsByEkatte.get(normEkatte(f.properties.ekatte));
+    if (!record || !record.lead || !record.valid) continue;
     new GeoJSON(f, {
-      style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(r.lead.id), fillOpacity: 0.75, stroke: false },
+      style: { color: '#ffffff', weight: 0.6, fillColor: partyColor(record.lead.id), fillOpacity: 0.75, stroke: false },
     })
-      .bindTooltip(`${r.name} — ${candidateName(r.lead.id)} · ${fmt(r.valid)}`)
-      .on('click', (e) => { openRecord(r); DomEvent.stopPropagation(e); })
+      .bindTooltip(`${record.name} — ${candidateName(record.lead.id)} · ${fmt(record.valid)}`)
+      .on('click', (e) => { openRecord(record); DomEvent.stopPropagation(e); })
       .addTo(layer);
   }
 }
@@ -587,9 +539,9 @@ function renderDistrictPoints(layer) {
   const maxValid = Math.max(...state.districts.map((d) => d.valid));
   for (const d of state.districts) {
     if (!d.lead) continue;
-    const r = 6 + 22 * Math.sqrt(d.valid / maxValid);
+    const radius = 6 + 22 * Math.sqrt(d.valid / maxValid);
     new CircleMarker([d.lat, d.lon], {
-      radius: r,
+      radius,
       color: '#ffffff',
       weight: 1.5,
       fillColor: partyColor(d.lead.id),
@@ -608,12 +560,12 @@ function renderSettlementPoints(layer) {
     spiderfyOnMaxZoom: true,
     polygonOptions: { weight: 0.5, color: '#fff' },
   });
-  const sliced = state.settlements.filter((s) => s.lead && s.valid > 0);
-  const maxValid = Math.max(...sliced.map((s) => s.valid));
-  for (const s of sliced) {
-    const r = 3 + 10 * Math.sqrt(s.valid / maxValid);
+  const withVotes = state.settlements.filter((s) => s.lead && s.valid > 0);
+  const maxValid = Math.max(...withVotes.map((s) => s.valid));
+  for (const s of withVotes) {
+    const radius = 3 + 10 * Math.sqrt(s.valid / maxValid);
     new CircleMarker([s.lat, s.lon], {
-      radius: r,
+      radius,
       color: '#ffffff',
       weight: 0.9,
       fillColor: partyColor(s.lead.id),
@@ -643,8 +595,8 @@ function openRecord(r) {
   const regTxt = reg ? ` (${reg})` : '';
   $('#detail-title').textContent = `${r.name}${regTxt} · ${fmt(r.sections)} секции · ${fmt(r.valid)} действителни гласа`;
   $('#detail-back').classList.remove('hidden');
-  const arr = Object.entries(r.votes);
-  const max = arr.length ? Math.max(...arr.map(([, v]) => v)) : 1;
+  const voteEntries = Object.entries(r.votes);
+  const max = voteEntries.length ? Math.max(...voteEntries.map(([, v]) => v)) : 1;
   $('#map-detail-body').innerHTML = candidateRowsHtml(r.votes, max);
   setPopupExpanded(true, true);
 }
@@ -669,13 +621,13 @@ function candidateRowsHtml(votes, maxvalue, shareOf) {
 // whole country. Replaces the removed floating legend and footer stats.
 function openOverview() {
   state.popupMode = 'overview';
-  const s = state.meta.stats;
-  $('#detail-title').textContent = `Общо · ${fmt(s.countedSections)} секции · ${fmt(s.totalValid)} действителни гласа`;
+  const stats = state.meta.stats;
+  $('#detail-title').textContent = `Общо · ${fmt(stats.countedSections)} секции · ${fmt(stats.totalValid)} действителни гласа`;
   $('#detail-back').classList.add('hidden');
   const votes = {};
   for (const c of state.meta.candidates) votes[c.partyId] = countOverall(c.partyId);
   const max = Math.max(...Object.values(votes), 1);
-  $('#map-detail-body').innerHTML = candidateRowsHtml(votes, max, s.totalValid);
+  $('#map-detail-body').innerHTML = candidateRowsHtml(votes, max, stats.totalValid);
 }
 
 // Flatten a GeoJSON geometry's [lng, lat] coordinates into `out`.
@@ -735,8 +687,8 @@ $('#detail-toggle').addEventListener('click', () => {
 $('#detail-back').addEventListener('click', () => openOverview());
 
 function openDetail(key) {
-  const r = rows().find((x) => rowKey(x) === key);
-  openRecord(r);
+  const record = rows().find((x) => rowKey(x) === key);
+  openRecord(record);
 }
 
 // Back / forward navigation
@@ -763,7 +715,11 @@ window.addEventListener('popstate', () => {
     const isMobile = window.matchMedia('(max-width: 700px)').matches;
     state.popupExpanded = !isMobile;
     openOverview();
-    setPopupExpanded(!isMobile, true);
+    // Always fit on boot, in both states. setPopupExpanded only fits when it
+    // expands, so on mobile (collapsed by default) the map was left with no
+    // view at all: no tiles and no layers until the user opened the popup.
+    setPopupExpanded(!isMobile, false);
+    fitMapToCountry();
   } catch (err) {
     setStatus('Грешка при зареждане на данните. Стартирай `node scripts/serve.mjs` и отвори през http://localhost:8000 (не през file://).');
     console.error(err);
