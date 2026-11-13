@@ -44,7 +44,7 @@ so the site is fully static and requires no runtime API.
     (uses only `fs` + `readline`).
   - `.agents/skills/geo-processing/scripts/build-geo.mjs` — boundary GeoJSON →
     `data/*.geojson` (choropleth geometry).
-- **Hosting:** GitHub Pages (just push the files).
+- **Hosting:** GitHub Pages [akamburov.github.io/cik-results-map/](https://akamburov.github.io/cik-results-map/).
 
 ## Project layout
 
